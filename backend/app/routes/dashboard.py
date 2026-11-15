@@ -1,7 +1,7 @@
 import os
 from datetime import datetime
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
-from urllib.parse import urlsplit
+from app.dependencies import grocy_config
 import httpx
 from fastapi import APIRouter, HTTPException, Response
 from app.dashboard import build_dashboard
@@ -14,11 +14,7 @@ router = APIRouter()
 async def get_dashboard(response: Response):
     response.headers["Cache-Control"] = "no-store"
     try:
-        url = os.environ["GROCY_URL"].rstrip("/")
-        key = os.environ["GROCY_API_KEY"]
-        parsed = urlsplit(url)
-        if parsed.scheme not in ("http", "https") or not parsed.hostname or parsed.username or parsed.password or parsed.query or parsed.fragment or not key:
-            raise ValueError()
+        url, key = grocy_config()
         timezone = os.getenv("HOUSEHOLD_TIMEZONE", "UTC")
         today = datetime.now(ZoneInfo(timezone)).date()
         list_id = int(os.environ["GROCY_SHOPPING_LIST_ID"]) if os.getenv("GROCY_SHOPPING_LIST_ID") else None

@@ -19,7 +19,7 @@ def optional_id(value):
 def done_flag(value):
     if value not in (0, 1, "0", "1", False, True):
         raise ValueError("Unknown completion state")
-    return str(value) in ("1", "True")
+    return value in (1, "1", True)
 
 
 def shopping(items, lists, products, list_id):
