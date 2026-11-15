@@ -10,6 +10,10 @@ class MockGrocy:
                          {'id': '11', 'name': 'Tea', 'qu_id_stock': '5', 'active': '1'},
                          {'id': '12', 'name': 'Inactive product', 'qu_id_stock': '5', 'active': '0'}]
         self.units = [{'id': '5', 'name': 'bottle'}, {'id': '6', 'name': 'pack'}]
+        self.locations = [{'id': '1', 'name': 'Fridge'}, {'id': '2', 'name': 'Cupboard'}]
+        self.settings = {'shopping_list_auto_add_below_min_stock_amount': '0'}
+        for product in self.products:
+            product.update(location_id='1', min_stock_amount='0', default_best_before_days='0', userfields={'keep':'yes'})
         self.items = [{'id': 101, 'shopping_list_id': 2, 'product_id': 10, 'amount': 2,
                        'qu_id': 6, 'note': 'Whole milk', 'done': 0, 'userfields': {'keep': 'value'}},
                       {'id': 102, 'shopping_list_id': 3, 'product_id': None, 'amount': 1,
@@ -35,13 +39,31 @@ class MockGrocy:
             return httpx.Response(self.failure, json={'error_message': 'SECRET upstream body'})
         if path == 'objects/shopping_lists':
             return httpx.Response(200, json=self.lists)
+        if path == 'user/settings':
+            return httpx.Response(200, json=self.settings)
+        if path == 'objects/locations':
+            return httpx.Response(200, json=self.locations)
         if path == 'objects/products':
-            return httpx.Response(200, json=self.products)
+            if request.method == 'GET':
+                return httpx.Response(200, json=self.products)
+            if request.method == 'POST':
+                required = {'name', 'location_id', 'qu_id_stock', 'qu_id_purchase', 'qu_id_consume', 'qu_id_price'}
+                assert required <= payload.keys(), 'Missing required fields'
+                record = dict(payload, id=self.next_id)
+                self.next_id += 1
+                self.products.append(record)
+                return httpx.Response(200, json={'created_object_id': record['id']})
         if path == 'objects/quantity_units':
             return httpx.Response(200, json=self.units)
         if path.startswith('objects/products/'):
             product = next((p for p in self.products if int(p['id']) == int(path.split('/')[-1])), None)
-            return httpx.Response(200, json=product) if product else httpx.Response(404)
+            if not product:
+                return httpx.Response(404)
+            if request.method == 'GET':
+                return httpx.Response(200, json=product)
+            if request.method == 'PUT':
+                product.update(payload)
+                return httpx.Response(204)
         if path == 'objects/shopping_list':
             if request.method == 'GET':
                 selected = request.url.params.get('query[]', '').removeprefix('shopping_list_id=')

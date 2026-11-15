@@ -1,6 +1,6 @@
 # Grocy Frontend
 
-A mobile-friendly household dashboard and grocery manager for Grocy. Grocy remains the source of truth; no separate database is used. Dinners can be planned using existing recipes; inventory remains read-only. Grocery entries can be added, edited, completed/undone, and removed without recording an inventory purchase.
+A mobile-friendly household dashboard, grocery manager, dinner planner, and product catalog for Grocy. Grocy remains the source of truth; no separate database is used. Dinners can be planned using existing recipes; inventory remains read-only. Grocery entries can be added, edited, completed/undone, and removed without recording an inventory purchase.
 
 ## Native local development
 
@@ -240,3 +240,56 @@ The field mappings and update behavior were reviewed against the official [Grocy
 Local automated coverage includes backend empty/multiple dinners, search/internal exclusion, add/move/replace/servings/delete, section protection, -1, malformed data, invalid input, timezone/year boundaries, product/note preservation, upstream failures, and timeouts after persistence. Frontend API tests check paths, fields, sanitization and date arithmetic. Playwright runs the complete recipe workflow and failure/recovery/pending-write cases on desktop and mobile alongside all grocery tests. The existing CI discovery includes these files automatically. The preview remains entirely in memory; `/_test/state` now includes `meals`. Automated mocks cannot verify Grocy triggers, installed-version permissions or real persistence.
 
 Recommended next phase: complete and record disposable Grocy compatibility verification, then improve recipe details and note editing based on household feedback before adding TRMNL delivery.
+
+
+## Simple product management (Phase 4)
+
+Open **Manage products** on the dashboard or `/#products`. Browse or search the household catalog, including inactive products, and open an item to see its usual storage place, measurement unit, and basic settings. Select **Edit product** to change its name, usual place, low-supply reminder, or suggested due days. Names update wherever the product is referenced; changing the usual place does not relocate existing stock. Measurement units are read-only on existing products because Grocy can cascade unit changes into stock, recipe and shopping quantities. There is no product deletion or activation control here.
+
+**Add a product** asks three questions: What is it called? How do you count or measure it? Where do you normally keep it? Unit and place choices come from Grocy, without preselecting an arbitrary ID. If either list is empty, an explanation asks a household administrator to configure it first. Under **More options**, users can set a low-supply threshold and suggested due days, or mark the product as never overdue. Zero threshold disables the reminder; zero due days suggests the day of a future addition, not an unlimited shelf life. These settings do not change existing quantities or due dates. Follow package dates; no food-safety inference is made.
+
+Saving a product creates only its definition. It does not put anything in stock or on the shopping list. When a grocery search has no matches, **Create this product** opens the same product form within the grocery view. After a confirmed save, **Continue with this product** returns to the same shopping list with the new product selected and the existing quantity/note draft retained. The user must still choose **Add to list**. They can instead choose an existing active product offered by duplicate detection. Inactive definitions are shown to prevent accidental recreation, but cannot be selected for groceries. Cancelling creation leaves the grocery draft intact.
+
+Exact name duplicates are blocked server-side after Unicode NFKC normalization, case folding, and whitespace normalization, including inactive products. Substring and close-spelling candidates require an explicit **This is a different product** acknowledgement; exact duplicates cannot be overridden. The browser shows immediate substring suggestions and the server also checks spelling similarity before every relevant write. Suggestions are heuristic, not proof that two products are the same. Use descriptive names for genuinely different sizes or varieties; selecting a unit never infers package contents.
+
+### Product API
+
+The existing grocery `GET /api/products?q=...` contract is unchanged. Product management uses a dedicated namespace:
+
+| Method | Route | Contract |
+| --- | --- | --- |
+| GET | `/api/product-catalog` | Sorted product definitions, including inactive ones; optional `q` name filter |
+| GET | `/api/product-catalog/options` | Existing quantity units and storage locations |
+| GET | `/api/product-catalog/{product_id}` | Current basic details and version token |
+| POST | `/api/product-catalog` | Required `name`, positive `unit_id`, positive `location_id`; optional `min_stock_amount`, `default_best_before_days`, `allow_similar_name`; returns created details with HTTP 201 |
+| PATCH | `/api/product-catalog/{product_id}` | Required `expected_version` plus supplied name/location/minimum/due-day changes only; optional `allow_similar_name`; returns current details |
+
+Names must be nonblank, at most 200 characters, without control characters. Minimum amounts are finite numbers from zero to 1,000,000,000; due days are integers from -1 to 36,500 (-1 is the UI's never-overdue checkbox). Boolean numbers, unknown fields, invalid references, null changes and empty patches are rejected. There is no DELETE endpoint or writable stock/unit-conversion field. HTTP 409 carries an application-owned duplicate/similarity, stale-edit, or automatic-shopping configuration result; 422 covers invalid requests, 404 missing records, and 502/503 sanitized upstream/configuration failures. Raw upstream response text and API credentials never reach React.
+
+Writes send only the changed supported fields. A version fingerprint detects changes between opening an item and saving it. Grocy's inconsistent inclusion of `userfields: null` between collection and single-record responses is excluded from the fingerprint; userfields are never written here. The editor refetches details when opening a product. This preflight check cannot provide atomic concurrency control across Grocy's separate GET/PUT calls, nor eliminate simultaneous duplicate-name races. Grocy's own uniqueness constraints remain the final exact-name safeguard; no automatic write retries are used.
+
+A failed/uncertain write, failed post-save read, or stale edit pauses saving until **Refresh products** successfully reloads the catalog and setup. Refresh discards the old edit draft so it cannot silently overwrite newer data. After an uncertain creation, review the refreshed catalog for the product before opening another creation form. These locks are local to the mounted view; reopening also loads current data before enabling writes. Known preflight validation and duplicate conflicts keep the form available for correction because no upstream write was attempted.
+
+### Verified upstream mappings and compatibility limits
+
+Implementation references the official [v4.5.0 product form](https://github.com/grocy/grocy/blob/v4.5.0/views/productform.blade.php), [OpenAPI specification](https://github.com/grocy/grocy/blob/v4.5.0/grocy.openapi.json), [generic entity controller](https://github.com/grocy/grocy/blob/v4.5.0/controllers/Api/GenericEntityApiController.php), and [product migrations](https://github.com/grocy/grocy/tree/v4.5.0/migrations), plus the equivalent upstream master form/controller. Source inspection is not verification of any installed household version.
+
+Migration `0207.sql` defines the required name, location, purchase-unit and stock-unit columns; other required columns have database defaults. Migrations `0210.sql` and `0219.sql` add consume and price units, which the native form also requires. Creation explicitly supplies all four unit IDs, using the single user-chosen unit for each. This is one consistent unit, not a conversion between a package and its contents. Migration `0231.sql` would otherwise create 1:1 conversions when different unit IDs lack conversions; our new-product mapping avoids that condition. Legacy pre-4.x schemas that require `qu_factor_purchase_to_stock` are not supported by this creation mapping.
+
+Creation supplies active=1, minimum=0, and due days=0 unless the optional values were provided. Other fields retain the verified v4.5.0 database defaults: for example due_type=1, no_own_stock=0, tare handling=0, and opened/freezing/thawing due days=0. We do not change parent products, conversions, recipe positions, purchase prices, descriptions, userfields, existing dates or stock transactions. Existing units remain untouched on every edit. Product, unit, and location references are validated through the generic object API.
+
+Grocy's generic product POST/PUT can call its automatic missing-product shopping generation when the API user's `shopping_list_auto_add_below_min_stock_amount` setting is enabled. The service reads `GET user/settings` before every product write and refuses to save while this setting is true or cannot be interpreted safely. It never changes the setting itself. This prevents the known side effect under stable configuration; changing that setting concurrently with a write cannot be made atomic through this API. Other installed-version extensions/triggers still require local verification.
+
+**Product mutations have not been tested against a running Grocy installation.** On an explicitly authorized disposable local/test instance, record its version, feature flags, API-user permissions and settings, then verify:
+
+- Create with an existing unit/location, including fractional thresholds and each due-date option. Confirm all four unit references and defaults persist after reload/restart and no conversion is invented.
+- Compare stock amounts, stock-log entries, recipe ingredient quantities, shopping entries and unrelated product properties before/after each create and edit. Confirm changing default location does not move existing stock, and due-day edits do not rewrite existing dates. Include products with parents, inherited thresholds, tare handling and custom fields because Grocy has its own triggers.
+- Confirm exact duplicate rejection, similar-name acknowledgement, inactive-product visibility, stale-edit conflicts, and safe behavior after connection failures or permission errors.
+- Verify the API user's effective automatic-shopping setting is returned by `user/settings`, writes are blocked when enabled, and no shopping entries change while saving with it disabled.
+- Test the complete grocery handoff on a nondefault list: create, continue with the selected product, and add separately. Confirm settings, feature flags, unit/location tracking and custom required fields match the assumed schemas.
+
+No production installation was contacted. Existing Compose files, license, credentials, meal behavior and grocery API contracts are preserved. The in-memory preview adds product POST/PUT, locations and API-user settings; `/_test/state` includes products. Backend, frontend API and desktop/mobile Playwright suites cover product creation, reference selection, duplicate handling, partial edits, stale data, missing setup, failures, keyboard/label access and grocery return alongside prior regressions. CI discovers these tests automatically. Automated accessibility checks cover form labels, focus, keyboard flow and overflow; they are not a full assistive-technology audit.
+
+Potential confusion to address in household onboarding: a saved product is not current stock; a bottle is not a known number of grams or cartons; zero due days means the addition day; an inactive existing product cannot be used for groceries here. Larger catalogs are fetched server-side and browsed in full without pagination; specialized unit conversions, activation, images, barcodes and advanced parent-product settings remain in Grocy.
+
+For Phase 5, first record disposable-instance compatibility results. Then add a separate, explicit **Add what you have** journey with quantity, actual storage place and package date, a review step before stock transactions, and the same uncertain-write recovery. Keep product setup distinct from purchases, consumption and inventory corrections, and resolve unit conversions explicitly before supporting mixed purchase/stock units.

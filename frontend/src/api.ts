@@ -84,3 +84,41 @@ export function shiftDate(value: string, days: number) {
   date.setUTCDate(date.getUTCDate() + days)
   return date.toISOString().slice(0, 10)
 }
+
+export interface ProductDetails {
+  id: number; name: string; location_id: number | null; location_name: string | null
+  unit_id: number | null; unit_name: string | null; purchase_unit_name: string | null
+  min_stock_amount: number; default_best_before_days: number; active: boolean; version: string
+}
+export interface ProductSetup { units: { id: number; name: string }[]; locations: { id: number; name: string }[] }
+export interface ProductFields { name?: string; location_id?: number; min_stock_amount?: number; default_best_before_days?: number; allow_similar_name?: boolean }
+export interface NewProduct extends ProductFields { name: string; unit_id: number; location_id: number }
+export class ProductRequestError extends Error {
+  code: string
+  matches: { id: number; name: string }[]
+  constructor(message: string, code = 'uncertain', matches: { id: number; name: string }[] = []) {
+    super(message); this.code = code; this.matches = matches
+  }
+}
+async function productRequest<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const response = await fetch(`/api/product-catalog${path}`, { ...options, headers: { Accept: 'application/json', ...(options.body ? { 'Content-Type': 'application/json' } : {}) } })
+  if (!response.ok) {
+    if (response.status === 409) {
+      const body = await response.json().catch(() => null)
+      const code = body?.detail?.code
+      // Only recognize application-owned contracts; never display arbitrary upstream text.
+      if (code === 'duplicate' || code === 'similar') throw new ProductRequestError(code === 'duplicate' ? 'A product with this name already exists. Use it or choose a different name.' : 'A similar product already exists. Review it before creating another.', code, Array.isArray(body.detail.matches) ? body.detail.matches : [])
+      if (code === 'stale') throw new ProductRequestError('This product changed since you opened it. Refresh products and review its latest details.', 'stale')
+      if (code === 'automatic_shopping') throw new ProductRequestError('Product saving is paused because automatic shopping additions are enabled in Grocy. Ask your household administrator to turn that setting off before saving here.', 'configuration')
+    }
+    if (response.status === 422) throw new ProductRequestError('Check the name, measurement unit, storage place, and optional numbers.', 'validation')
+    if (response.status === 404) throw new ProductRequestError('This product is no longer available. Refresh products.', 'stale')
+    throw new ProductRequestError('Unable to confirm your change. Refresh products before saving again.')
+  }
+  return response.json()
+}
+export const getProductCatalog = (signal?: AbortSignal) => productRequest<ProductDetails[]>('', { signal })
+export const getProductSetup = (signal?: AbortSignal) => productRequest<ProductSetup>('/options', { signal })
+export const getProductDetails = (id: number, signal?: AbortSignal) => productRequest<ProductDetails>(`/${id}`, { signal })
+export const createProduct = (entry: NewProduct) => productRequest<ProductDetails>('', { method: 'POST', body: JSON.stringify(entry) })
+export const editProduct = (id: number, version: string, changes: ProductFields) => productRequest<ProductDetails>(`/${id}`, { method: 'PATCH', body: JSON.stringify({ ...changes, expected_version: version }) })

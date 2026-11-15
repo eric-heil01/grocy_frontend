@@ -53,7 +53,7 @@ def reset():
 
 @app.get('/_test/state')
 def state():
-    return {'items': app.state.fixture.items, 'meals': app.state.fixture.meals, 'requests': app.state.fixture.requests}
+    return {'items': app.state.fixture.items, 'meals': app.state.fixture.meals, 'products': app.state.fixture.products, 'requests': app.state.fixture.requests}
 
 
 @app.post('/_test/failure/{mode}')

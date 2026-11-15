@@ -124,3 +124,50 @@ test('meal write failure is sanitized and never retried', async () => {
     assert.equal(calls, 1)
   } finally { globalThis.fetch = original }
 })
+
+import { getProductCatalog, getProductSetup, getProductDetails, createProduct, editProduct, ProductRequestError } from '../src/api.ts'
+
+test('product reads and writes use the product catalog API, expected versions and explicit changes', async () => {
+  const original = globalThis.fetch
+  const requests = []
+  const controller = new AbortController()
+  try {
+    globalThis.fetch = async (url, options) => {
+      requests.push([url, options.method ?? 'GET', options.body ? JSON.parse(options.body) : null, options.signal])
+      return new Response(JSON.stringify({ id: 15, name:'Coffee' }))
+    }
+    await getProductCatalog(controller.signal)
+    await getProductSetup(controller.signal)
+    await getProductDetails(15, controller.signal)
+    await createProduct({ name:'Coffee', unit_id:5, location_id:2 })
+    await editProduct(15,'abc',{ name:'Fresh coffee' })
+    assert.deepEqual(requests.map(r => r.slice(0,3)), [
+      ['/api/product-catalog','GET',null],
+      ['/api/product-catalog/options','GET',null],
+      ['/api/product-catalog/15','GET',null],
+      ['/api/product-catalog','POST',{name:'Coffee',unit_id:5,location_id:2}],
+      ['/api/product-catalog/15','PATCH',{name:'Fresh coffee',expected_version:'abc'}],
+    ])
+    assert.ok(requests.slice(0,3).every(r => r[3] === controller.signal))
+  } finally { globalThis.fetch = original }
+})
+
+test('product failures are sanitized and writes never retry', async () => {
+  const original = globalThis.fetch
+  let calls = 0
+  try {
+    globalThis.fetch = async () => { calls++; return new Response('SECRET', { status:502 }) }
+    await assert.rejects(createProduct({name:'Coffee',unit_id:5,location_id:2}), /Refresh products/)
+    assert.equal(calls,1)
+    globalThis.fetch = async () => new Response(JSON.stringify({detail:{code:'stale',message:'SECRET'}}),{status:409})
+    await assert.rejects(editProduct(15,'abc',{name:'Coffee'}), e => e instanceof ProductRequestError && e.code === 'stale' && !e.message.includes('SECRET'))
+  } finally { globalThis.fetch = original }
+})
+
+test('product duplicate contracts provide existing choices without treating them as successful writes', async () => {
+  const original = globalThis.fetch
+  try {
+    globalThis.fetch = async () => new Response(JSON.stringify({detail:{code:'duplicate',matches:[{id:10,name:'Milk'}]}}),{status:409})
+    await assert.rejects(createProduct({name:'Milk',unit_id:5,location_id:1}), e => e.code === 'duplicate' && e.matches[0].id === 10)
+  } finally { globalThis.fetch = original }
+})

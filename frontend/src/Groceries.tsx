@@ -3,6 +3,7 @@ import type { FormEvent } from 'react'
 import { addGroceryItem, getGroceryEntries, getGroceryLists, removeGroceryItem, searchProducts, updateGroceryItem } from './api'
 import type { GroceryCreate, GroceryEntries, GroceryItem, GroceryLists, ProductOption } from './api'
 import './Groceries.css'
+import Products from './Products'
 
 function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : 'Unable to complete the request. Please refresh the list.'
@@ -10,7 +11,8 @@ function errorMessage(error: unknown) {
 
 type Mutation = (operation: () => Promise<unknown>, message: string, afterSave?: () => void) => Promise<void>
 
-function AddItem({ disabled, onAdd }: { disabled: boolean; onAdd: (entry: GroceryCreate, reset: () => void) => Promise<void> }) {
+function AddItem({ disabled, onAdd, onProductBusy }: { onProductBusy: (busy: boolean) => void; disabled: boolean; onAdd: (entry: GroceryCreate, reset: () => void) => Promise<void> }) {
+  const [creating, setCreating] = useState(false)
   const [mode, setMode] = useState<'product' | 'text'>('product')
   const [query, setQuery] = useState('')
   const [product, setProduct] = useState<ProductOption | null>(null)
@@ -51,7 +53,9 @@ function AddItem({ disabled, onAdd }: { disabled: boolean; onAdd: (entry: Grocer
 
   return <section className="card add-item" aria-labelledby="add-heading">
     <h2 id="add-heading">Add an item</h2>
-    <form onSubmit={submit}>
+    {creating ? <Products embedded initialName={query.trim()} onBusy={onProductBusy} onCancel={() => setCreating(false)} onChoose={created => {
+      setProduct({ id: created.id, name: created.name, unit_id: created.unit_id, unit_name: created.unit_name }); setQuery(created.name); setResults([]); setSearching(false); setSearchError(''); setCreating(false)
+    }} /> : <form onSubmit={submit}>
       <fieldset disabled={disabled}>
         <legend className="sr-only">New grocery item</legend>
         <div className="entry-mode" aria-label="Item type">
@@ -70,7 +74,7 @@ function AddItem({ disabled, onAdd }: { disabled: boolean; onAdd: (entry: Grocer
           {!product && results.length > 0 && <ul className="search-results" aria-label="Product results">{results.map(result => <li key={result.id}>
             <button type="button" onClick={() => { setProduct(result); setQuery(result.name); setResults([]); setSearching(false) }}>{result.name}<small>{result.unit_name ?? 'Unit unavailable'}</small></button>
           </li>)}</ul>}
-          {!product && query.trim() && !searching && !searchError && results.length === 0 && <p className="muted">No matching products. Try another name or add a free-text item.</p>}
+          {!product && query.trim() && !searching && !searchError && results.length === 0 && <div><p className="muted">No matching products. Try another name or add a free-text item.</p><button type="button" onClick={() => setCreating(true)}>Create this product</button></div>}
           {product && <p className="selected-product">Selected: <strong>{product.name}</strong></p>}
         </div>}
         <div className="add-fields">
@@ -83,7 +87,7 @@ function AddItem({ disabled, onAdd }: { disabled: boolean; onAdd: (entry: Grocer
         </div>
         <button className="primary" disabled={mode === 'product' ? !product || !product.unit_id : !note.trim()} type="submit">Add to list</button>
       </fieldset>
-    </form>
+    </form>}
   </section>
 }
 
@@ -122,6 +126,7 @@ function ItemRow({ item, disabled, mutate }: { item: GroceryItem; disabled: bool
 }
 
 export default function Groceries() {
+  const [productBusy, setProductBusy] = useState(false)
   const [catalog, setCatalog] = useState<GroceryLists | null>(null)
   const [selected, setSelected] = useState<number | null>(null)
   const [entries, setEntries] = useState<GroceryEntries | null>(null)
@@ -166,7 +171,7 @@ export default function Groceries() {
   }
 
   const mutate: Mutation = async (operation, message, afterSave) => {
-    if (mutationLock.current || selected === null || needsRefresh || loading) return
+    if (mutationLock.current || selected === null || needsRefresh || loading || productBusy) return
     mutationLock.current = true
     setBusy(true); setError(''); setStatus('')
     let saved = false
@@ -188,21 +193,21 @@ export default function Groceries() {
   }
 
   return <main className="grocery-page">
-    <header><a className="brand" href="#">grocy<span> / groceries</span></a><button disabled={loading || busy} onClick={refresh}>Refresh</button></header>
-    <nav aria-label="Main navigation">{busy ? <span>Saving to Grocy...</span> : <a href="#">Back to dashboard</a>}</nav>
+    <header><a className="brand" href="#">grocy<span> / groceries</span></a><button disabled={loading || busy || productBusy} onClick={refresh}>Refresh</button></header>
+    <nav aria-label="Main navigation">{busy || productBusy ? <span>Saving to Grocy...</span> : <a href="#">Back to dashboard</a>}</nav>
     <div className="intro"><p className="eyebrow">ONE LESS THING TO REMEMBER</p><h1>Your grocery list.</h1><p>Add what you need. Check it off as you shop.</p></div>
-    {catalog && catalog.lists.length > 0 && <label className="list-selector">Shopping list<select value={selected ?? ''} disabled={busy} onChange={event => {
+    {catalog && catalog.lists.length > 0 && <label className="list-selector">Shopping list<select value={selected ?? ''} disabled={busy || productBusy} onChange={event => {
       setSelected(Number(event.target.value)); setEntries(null); setLoading(true); setError(''); setStatus(''); setNeedsRefresh(false)
     }}>{catalog.lists.map(list => <option key={list.id} value={list.id}>{list.name}</option>)}</select></label>}
     {error && <div role="alert" className="message error"><p>{error}</p><button disabled={busy || loading} onClick={refresh}>Refresh lists</button></div>}
     <p className="grocery-status" role="status">{busy ? 'Saving and refreshing your list...' : loading ? 'Loading your groceries...' : status}</p>
     {catalog?.lists.length === 0 && <section className="card"><h2>No shopping lists yet</h2><p>Create a shopping list in Grocy to get started.</p></section>}
     {selected !== null && <div className="grocery-layout">
-      <AddItem key={selected} disabled={busy || loading || needsRefresh || !entries} onAdd={(entry, reset) => mutate(() => addGroceryItem(selected, entry), 'Item added.', reset)} />
+      <AddItem onProductBusy={setProductBusy} key={selected} disabled={busy || loading || needsRefresh || !entries} onAdd={(entry, reset) => mutate(() => addGroceryItem(selected, entry), 'Item added.', reset)} />
       <section className="card grocery-list" aria-labelledby="items-heading" aria-busy={busy || loading}>
         <h2 id="items-heading">{entries?.name ?? 'Grocery items'}</h2>
         {entries && <><p className="count">{entries.remaining_items}<span>items remaining / {entries.total_items} total</span></p><p className="muted unit-help">Product quantities are in stock units. Checking an item off does not add it to inventory.</p>
-          {entries.items.length === 0 ? <p className="empty">Your list is empty. Add your first item.</p> : <ul className="grocery-entries">{[...entries.items].sort((a, b) => Number(a.done) - Number(b.done)).map(item => <ItemRow key={`${selected}-${item.id}`} item={item} disabled={busy || loading || needsRefresh} mutate={mutate} />)}</ul>}</>}
+          {entries.items.length === 0 ? <p className="empty">Your list is empty. Add your first item.</p> : <ul className="grocery-entries">{[...entries.items].sort((a, b) => Number(a.done) - Number(b.done)).map(item => <ItemRow key={`${selected}-${item.id}`} item={item} disabled={busy || loading || needsRefresh || productBusy} mutate={mutate} />)}</ul>}</>}
       </section>
     </div>}
     <footer>A simpler rhythm for home.</footer>

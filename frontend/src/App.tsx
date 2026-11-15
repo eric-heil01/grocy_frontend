@@ -4,6 +4,7 @@ import type { Dashboard, MealDay } from './api'
 import './App.css'
 import Groceries from './Groceries'
 import Meals from './Meals'
+import Products from './Products'
 
 function MealNames({ day }: { day: MealDay }) {
   if (!day.available) return <span className="muted">Dinner information unavailable</span>
@@ -30,7 +31,7 @@ function DashboardHome() {
   }, [attempt])
 
   return <main>
-    <header><a className="brand" href="#">grocy<span> / home</span></a><button disabled={loading} onClick={refresh}>Refresh</button></header>
+    <header><a className="brand" href="#">grocy<span> / home</span></a><div className="product-actions"><a href="#products">Manage products</a><button disabled={loading} onClick={refresh}>Refresh</button></div></header>
     <div className="intro"><p className="eyebrow">A LITTLE LESS TO THINK ABOUT</p><h1>Your household, at a glance.</h1><p>Tonight's dinner. The next shop. The week ahead.</p></div>
     {loading && <p role="status" className="message">Loading your household...</p>}
     {error && <div role="alert" className="message error">{error} <button onClick={refresh}>Try again</button></div>}
@@ -55,5 +56,5 @@ export default function App() {
     window.addEventListener('hashchange', onHashChange)
     return () => window.removeEventListener('hashchange', onHashChange)
   }, [])
-  return page === '#groceries' ? <Groceries /> : page === '#meals' ? <Meals /> : <DashboardHome />
+  return page === '#groceries' ? <Groceries /> : page === '#meals' ? <Meals /> : page === '#products' ? <Products /> : <DashboardHome />
 }
