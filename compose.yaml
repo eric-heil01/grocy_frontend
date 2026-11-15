@@ -4,6 +4,9 @@ services:
     restart: unless-stopped
     env_file:
       - .env
+    # Reach a Grocy port published on the Docker host (including Linux Engine).
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
   web:
     build: ./frontend

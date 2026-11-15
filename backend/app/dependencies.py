@@ -3,7 +3,7 @@ import os
 from urllib.parse import urlsplit
 
 import httpx
-from fastapi import HTTPException, Response
+from fastapi import HTTPException, Request, Response
 from pydantic import ValidationError
 
 from app.grocy_client import GrocyClient, GrocyUnavailable
@@ -23,12 +23,14 @@ def grocy_config():
         raise HTTPException(503, "Grocy connection is not configured.") from None
 
 
-async def get_grocy(response: Response):
+async def get_grocy(response: Response, request: Request):
     response.headers["Cache-Control"] = "no-store"
     url, key = grocy_config()
+    # Test preview supplies a transport on its own isolated app instance.
+    options = {"transport": request.app.state.grocy_transport} if hasattr(request.app.state, "grocy_transport") else {}
     try:
         async with httpx.AsyncClient(
-            base_url=f"{url}/api/", headers={"GROCY-API-KEY": key}, timeout=10.0
+            base_url=f"{url}/api/", headers={"GROCY-API-KEY": key}, timeout=10.0, **options
         ) as http:
             yield GrocyClient(http)
     except GrocyUnavailable as exc:

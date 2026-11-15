@@ -1,23 +1,64 @@
-"""Local browser preview using only disposable mock data. See README."""
+"""Local-only preview: real routes/error handling, exclusively in-memory Grocy data.
+Test controls exist only on this app and are excluded from the production image.
+"""
 import os
+from contextlib import asynccontextmanager
+from unittest.mock import patch
 import httpx
-from app.main import app
-from app.dependencies import get_grocy
-from app.grocy_client import GrocyClient
-from app.dashboard import build_dashboard
-import app.routes.dashboard as dashboard_route
+from fastapi import HTTPException
+from app.main import create_app
 from mock_grocy import MockGrocy
 
-fixture = MockGrocy()
-os.environ.update(GROCY_URL='http://mock', GROCY_API_KEY='disposable-test-key', HOUSEHOLD_TIMEZONE='UTC')
+@asynccontextmanager
+async def local_configuration(application):
+    # Only this disposable server's lifetime uses the test configuration.
+    with patch.dict(os.environ, {
+        'GROCY_URL': 'http://mock', 'GROCY_API_KEY': 'disposable-test-key',
+        'HOUSEHOLD_TIMEZONE': 'UTC', 'GROCY_SHOPPING_LIST_ID': '', 'GROCY_DINNER_SECTION_ID': '',
+    }):
+        yield
 
-async def mock_client():
-    async with httpx.AsyncClient(base_url='http://mock/api/', transport=httpx.MockTransport(fixture)) as http:
-        yield GrocyClient(http)
+app = create_app()
+app.router.lifespan_context = local_configuration
+app.state.fixture = MockGrocy()
+app.state.failure = None
+app.state.fail_next_read = False
 
-async def mock_dashboard(client, today, timezone, list_id=None, section_id=None):
-    async with httpx.AsyncClient(base_url='http://mock/api/', transport=httpx.MockTransport(fixture)) as http:
-        return await build_dashboard(GrocyClient(http), today, timezone, list_id, section_id)
 
-app.dependency_overrides[get_grocy] = mock_client
-dashboard_route.build_dashboard = mock_dashboard
+def handle(request):
+    write = request.method in ('POST', 'PUT', 'DELETE')
+    if write and app.state.failure == 'write':
+        app.state.failure = None
+        return httpx.Response(500, text='SECRET test upstream error')
+    if not write and app.state.fail_next_read:
+        app.state.fail_next_read = False
+        return httpx.Response(500, text='SECRET test reload error')
+    response = app.state.fixture(request)
+    if write and app.state.failure == 'reload':
+        app.state.failure = None
+        app.state.fail_next_read = True
+    return response
+
+
+app.state.grocy_transport = httpx.MockTransport(handle)
+
+
+@app.post('/_test/reset')
+def reset():
+    app.state.fixture = MockGrocy()
+    app.state.failure = None
+    app.state.fail_next_read = False
+    return {'ok': True}
+
+
+@app.get('/_test/state')
+def state():
+    return {'items': app.state.fixture.items, 'requests': app.state.fixture.requests}
+
+
+@app.post('/_test/failure/{mode}')
+def failure(mode: str):
+    if mode not in ('write', 'reload'):
+        raise HTTPException(422, 'Unknown test scenario')
+    app.state.failure = mode
+    return {'ok': True}

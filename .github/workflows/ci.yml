@@ -1,0 +1,74 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - run: python -m pip install -r backend/requirements.txt
+      - name: Backend tests (mock Grocy only)
+        working-directory: backend
+        run: python -m unittest discover -s tests -v
+      - name: Prepare disposable Compose environment
+        run: cp .env.docker.example .env
+      - name: Validate host-gateway Compose configuration
+        run: docker compose --env-file .env.docker.example config --no-env-resolution --quiet
+      - name: Validate external-network override
+        env:
+          GROCY_DOCKER_NETWORK: ci-validation-only
+        run: docker compose --env-file .env.docker.example -f compose.yaml -f compose.grocy-network.yaml config --no-env-resolution --quiet
+
+  frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm test
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm run build
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - run: python -m pip install -r ../backend/requirements.txt
+      - run: npx playwright install --with-deps chromium
+      - name: Grocery browser tests (desktop and mobile, mock Grocy only)
+        env:
+          E2E_PYTHON: python
+        run: npm run test:browser
+      - uses: actions/upload-artifact@v5
+        if: failure()
+        with:
+          name: playwright-failure-report
+          path: |
+            frontend/playwright-report/
+            frontend/test-results/
+          retention-days: 7

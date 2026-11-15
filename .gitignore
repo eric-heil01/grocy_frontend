@@ -222,3 +222,10 @@ __marimo__/
 .venv/
 node_modules/
 dist/
+
+# Local credentials and browser test artifacts
+.env.*
+!.env.example
+!.env.docker.example
+frontend/playwright-report/
+frontend/test-results/

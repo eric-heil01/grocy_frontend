@@ -1,0 +1,12 @@
+# Optional: attach only the API to an existing Grocy Docker network.
+# Run with: docker compose -f compose.yaml -f compose.grocy-network.yaml ...
+services:
+  api:
+    networks:
+      - default
+      - grocy
+
+networks:
+  grocy:
+    external: true
+    name: ${GROCY_DOCKER_NETWORK:?Set GROCY_DOCKER_NETWORK to an existing Grocy network}
