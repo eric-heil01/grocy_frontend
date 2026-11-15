@@ -1,0 +1,15 @@
+.meal-page nav { padding: 20px 0; }
+.meal-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.meal-days { display: grid; gap: 20px; padding-bottom: 40px; }
+.meal-day h2 { font-size: 1.3rem; }
+.planned-meal { padding: 18px 0; border-bottom: 1px solid #dce3d8; margin-bottom: 18px; overflow-wrap: anywhere; }
+.planned-meal p { margin: 8px 0; }
+.dinner-form { margin-top: 20px; padding: 18px; background: #f5f6f0; border-radius: 8px; }
+.dinner-form fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
+.dinner-form legend { font-weight: 700; margin-bottom: 14px; }
+.dinner-form label { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; font-weight: 600; }
+.dinner-form input { width: 100%; min-height: 46px; padding: 10px; border: 1px solid #9eafa3; border-radius: 8px; font: inherit; background: white; color: #243b32; }
+.recipe-results { max-height: 240px; overflow: auto; margin: 12px 0; }
+.recipe-results button { width: 100%; text-align: left; margin-bottom: 6px; overflow-wrap: anywhere; }
+.meal-confirm { padding: 12px 0; }
+@media (min-width: 850px) { .meal-days { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; } }

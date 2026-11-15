@@ -1,5 +1,6 @@
 """Dashboard business logic, independent of FastAPI and future display clients."""
 import asyncio
+from app.calendar_config import dinner_section
 from datetime import date, timedelta
 from pydantic import ValidationError
 from app.grocy_client import GrocyUnavailable
@@ -44,14 +45,7 @@ def shopping(items, lists, products, list_id):
 
 
 def meals(plan, recipes, products, sections, today, section_id):
-    sections = rows(sections)
-    if section_id is None:
-        matches = [int(s["id"]) for s in sections if str(s.get("name") or "").strip().casefold() == "dinner"]
-        if len(matches) != 1:
-            raise ValueError("Configure dinner section")
-        section_id = matches[0]
-    if not any(int(s["id"]) == section_id for s in sections):
-        raise ValueError("Dinner section missing")
+    section_id = dinner_section(sections, section_id)
     recipe_names = {int(r["id"]): r["name"] for r in rows(recipes)}
     product_names = {int(p["id"]): p["name"] for p in rows(products)}
     days = {today + timedelta(days=i): [] for i in range(7)}
@@ -68,7 +62,8 @@ def meals(plan, recipes, products, sections, today, section_id):
             name = entry.get("note") or "Untitled meal plan entry"
         else:
             raise ValueError("Unsupported meal type")
-        days[day].append(Meal(id=entry["id"], name=name, recipe_id=recipe_id))
+        days[day].append(Meal(id=entry["id"], name=name, recipe_id=recipe_id, type=entry["type"],
+                                    recipe_servings=entry.get("recipe_servings") if entry["type"] == "recipe" else None))
     return [MealDay(date=d, available=True, planned=bool(entries), meals=entries) for d, entries in days.items()]
 
 

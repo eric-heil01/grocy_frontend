@@ -1,6 +1,6 @@
 import os
-from datetime import datetime
-from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+from zoneinfo import ZoneInfoNotFoundError
+from app.calendar_config import household_calendar, dinner_configuration
 from app.dependencies import grocy_config
 import httpx
 from fastapi import APIRouter, HTTPException, Request, Response
@@ -15,10 +15,9 @@ async def get_dashboard(response: Response, request: Request):
     response.headers["Cache-Control"] = "no-store"
     try:
         url, key = grocy_config()
-        timezone = os.getenv("HOUSEHOLD_TIMEZONE", "UTC")
-        today = datetime.now(ZoneInfo(timezone)).date()
+        today, timezone = household_calendar()
         list_id = int(os.environ["GROCY_SHOPPING_LIST_ID"]) if os.getenv("GROCY_SHOPPING_LIST_ID") else None
-        section_id = int(os.environ["GROCY_DINNER_SECTION_ID"]) if os.getenv("GROCY_DINNER_SECTION_ID") else None
+        section_id = dinner_configuration()
     except (KeyError, ValueError, ZoneInfoNotFoundError):
         raise HTTPException(503, "Dashboard configuration is unavailable.") from None
     options = {"transport": request.app.state.grocy_transport} if hasattr(request.app.state, "grocy_transport") else {}

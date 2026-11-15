@@ -87,3 +87,40 @@ test('failed grocery writes reject without revealing bodies or retrying', async 
     await assert.rejects(removeGroceryItem(2, 101), /no longer available/)
   } finally { globalThis.fetch = original }
 })
+
+import { getMeals, searchRecipes, addMeal, updateMeal, removeMeal, shiftDate } from '../src/api.ts'
+
+test('meal requests use safe relative paths, intended fields and individual IDs', async () => {
+  const original = globalThis.fetch
+  const requests = []
+  try {
+    globalThis.fetch = async (url, options) => {
+      requests.push([url, options.method ?? 'GET', options.body ? JSON.parse(options.body) : null])
+      return new Response(JSON.stringify({ ok: true }))
+    }
+    await getMeals('2026-12-31')
+    await searchRecipes('Pasta & rice')
+    await addMeal({ day: '2026-12-31', recipe_id: 20, recipe_servings: 2 })
+    await updateMeal(103, { recipe_servings: 3 })
+    await removeMeal(103)
+    assert.deepEqual(requests, [
+      ['/api/meals?start=2026-12-31', 'GET', null],
+      ['/api/recipes?q=Pasta%20%26%20rice', 'GET', null],
+      ['/api/meals', 'POST', { day: '2026-12-31', recipe_id: 20, recipe_servings: 2 }],
+      ['/api/meals/103', 'PATCH', { recipe_servings: 3 }],
+      ['/api/meals/103', 'DELETE', null],
+    ])
+    assert.equal(shiftDate('2026-12-31', 7), '2027-01-07')
+    assert.equal(shiftDate('2026-03-05', 7), '2026-03-12')
+  } finally { globalThis.fetch = original }
+})
+
+test('meal write failure is sanitized and never retried', async () => {
+  const original = globalThis.fetch
+  let calls = 0
+  try {
+    globalThis.fetch = async () => { calls++; return new Response('SECRET', { status: 502 }) }
+    await assert.rejects(addMeal({ day: '2026-12-31', recipe_id: 20 }), /Refresh dinners/)
+    assert.equal(calls, 1)
+  } finally { globalThis.fetch = original }
+})

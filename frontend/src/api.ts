@@ -59,3 +59,28 @@ export const searchProducts = (query: string, signal?: AbortSignal) => groceryRe
 export const addGroceryItem = (listId: number, entry: GroceryCreate) => groceryRequest<{ ok: boolean }>(listPath(listId), { method: 'POST', body: JSON.stringify(entry) })
 export const updateGroceryItem = (listId: number, entryId: number, changes: GroceryUpdate) => groceryRequest<{ ok: boolean }>(`${listPath(listId)}/${entryId}`, { method: 'PATCH', body: JSON.stringify(changes) })
 export const removeGroceryItem = (listId: number, entryId: number) => groceryRequest<{ ok: boolean }>(`${listPath(listId)}/${entryId}`, { method: 'DELETE' })
+
+export interface PlannedMeal { id: number; name: string; recipe_id: number | null; type: string; recipe_servings: number | null }
+export interface MealWeek { today: string; timezone: string; start: string; days: (Omit<MealDay, 'meals'> & { meals: PlannedMeal[] })[] }
+export interface RecipeOption { id: number; name: string; base_servings: number | null }
+export interface MealChanges { day?: string; recipe_id?: number; recipe_servings?: number }
+async function mealRequest<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const response = await fetch(`/api${path}`, { ...options, headers: { Accept: 'application/json', ...(options.body ? { 'Content-Type': 'application/json' } : {}) } })
+  if (!response.ok) {
+    if (response.status === 422) throw new Error('Check the date, recipe selection, and servings. Refresh before trying again.')
+    if (response.status === 503) throw new Error('Dinner configuration is unavailable. Check the household timezone and dinner section.')
+    if (response.status === 404) throw new Error('This dinner is no longer available. Refresh before trying again.')
+    throw new Error('Unable to confirm the meal request. Refresh dinners before trying again.')
+  }
+  return response.json()
+}
+export const getMeals = (start?: string, signal?: AbortSignal) => mealRequest<MealWeek>(`/meals${start ? `?start=${encodeURIComponent(start)}` : ''}`, { signal })
+export const searchRecipes = (q: string, signal?: AbortSignal) => mealRequest<RecipeOption[]>(`/recipes?q=${encodeURIComponent(q)}`, { signal })
+export const addMeal = (entry: MealChanges) => mealRequest<{ ok: boolean }>('/meals', { method: 'POST', body: JSON.stringify(entry) })
+export const updateMeal = (id: number, changes: MealChanges) => mealRequest<{ ok: boolean }>(`/meals/${id}`, { method: 'PATCH', body: JSON.stringify(changes) })
+export const removeMeal = (id: number) => mealRequest<{ ok: boolean }>(`/meals/${id}`, { method: 'DELETE' })
+export function shiftDate(value: string, days: number) {
+  const date = new Date(`${value}T12:00:00Z`)
+  date.setUTCDate(date.getUTCDate() + days)
+  return date.toISOString().slice(0, 10)
+}

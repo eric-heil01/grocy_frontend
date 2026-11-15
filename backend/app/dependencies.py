@@ -38,4 +38,4 @@ async def get_grocy(response: Response, request: Request):
             raise HTTPException(404, "This Grocy record is no longer available. Refresh the list.") from None
         raise HTTPException(502, "Unable to confirm the Grocy request. Refresh the list before trying again.") from None
     except (ValidationError, ValueError, TypeError, KeyError):
-        raise HTTPException(502, "Grocy returned unsupported grocery data. Refresh the list or check compatibility.") from None
+        raise HTTPException(502, "Grocy returned unsupported data. Refresh the list or check compatibility.") from None

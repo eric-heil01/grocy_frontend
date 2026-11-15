@@ -5,6 +5,8 @@ class Meal(BaseModel):
     id: int
     name: str
     recipe_id: int | None = None
+    type: str = "recipe"
+    recipe_servings: float | None = Field(default=None, gt=0, allow_inf_nan=False)
 
 class MealDay(BaseModel):
     date: date

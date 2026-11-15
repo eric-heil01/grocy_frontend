@@ -1,6 +1,6 @@
 # Grocy Frontend
 
-A mobile-friendly household dashboard and grocery manager for Grocy. Grocy remains the source of truth; no separate database is used. Meals and inventory are read-only. Grocery entries can be added, edited, completed/undone, and removed without recording an inventory purchase.
+A mobile-friendly household dashboard and grocery manager for Grocy. Grocy remains the source of truth; no separate database is used. Dinners can be planned using existing recipes; inventory remains read-only. Grocery entries can be added, edited, completed/undone, and removed without recording an inventory purchase.
 
 ## Native local development
 
@@ -198,6 +198,45 @@ Also verify read-side fields, existing `qu_id`/stock-unit relationships, `done` 
 
 ## Current limits
 
-No meal-plan editing, recipe creation, barcode scanning, stock purchases, authentication service, TRMNL integration, or deployment automation is included. Product search fetches the catalog server-side and returns at most 30 matches. Concurrent edits follow Grocy's existing last-write behavior. There is no automatic polling, midnight rollover, or unit-conversion selector. Manual accessibility review and actual-Grocy verification remain release checks.
+No recipe creation, barcode scanning, stock purchases, authentication service, TRMNL integration, or deployment automation is included. Product search fetches the catalog server-side and returns at most 30 matches. Concurrent edits follow Grocy's existing last-write behavior. There is no automatic polling, midnight rollover, or unit-conversion selector. Manual accessibility review and actual-Grocy verification remain release checks.
 
 This project is independently developed and is not officially affiliated with Grocy.
+
+
+## Interactive dinner planning (Phase 3)
+
+Open **Plan dinners** from Dinner Tonight, **Open meal planner** from Upcoming Dinners, or `/#meals`. The current period starts on today in `HOUSEHOLD_TIMEZONE` and includes the next six calendar dates; previous/next move exactly seven dates, and Current week returns to household today. Browser timezone and daylight saving changes do not shift those dates. The page does not automatically roll over at midnight; refresh to update today.
+
+Each day supports multiple independent recipe entries. Choose Add dinner, search by name, select an existing recipe, adjust servings, and save. Edit changes the date, selected recipe, and/or servings of one entry. Remove asks for confirmation for that entry only. Existing product and note entries stay visible and can be individually removed; their editing and new note creation are deferred. Leaving an unsaved form or changing periods discards its draft. Returning home refetches the dashboard.
+
+The planner locks editing and period navigation during writes. A failed/uncertain write or failed reload locks all further mutations until **Refresh dinners** successfully reloads the displayed period; no write retries occur automatically. This lock is local to the mounted page, as with groceries; returning/reopening loads data again before enabling writes. There is no offline write queue. Search requests are debounced and obsolete requests cancelled. Empty plans show Nothing planned; upstream/configuration errors show an unavailable message and disable mutation controls.
+
+| Method | Route | Purpose |
+| --- | --- | --- |
+| GET | `/api/recipes?q=pasta` | Case-insensitive recipe-name search, at most 30 results, with ID/name/base servings; only `type=normal` is selectable |
+| GET | `/api/meals?start=2026-12-31` | Seven consecutive dinner dates; omitted start uses household today; includes product and note entries |
+| POST | `/api/meals` | Add `{day: "2026-12-31", recipe_id: 20, recipe_servings: 2}` without removing existing dinners |
+| PATCH | `/api/meals/{entry_id}` | Supplied `day`, `recipe_id`, and/or `recipe_servings` only; recipe entries only |
+| DELETE | `/api/meals/{entry_id}` | Remove one entry after checking dinner-section ownership |
+
+All dates must be ISO calendar dates (no timestamps), recipe/entry IDs positive, servings finite and positive up to 1,000,000,000. Empty patches, unknown fields, null changes, boolean quantities and internal/missing recipes are rejected. Creation defaults servings to 1 if omitted; the UI offers the recipe's base servings when selecting it. Recipe selection never writes to the recipe itself. Missing/ambiguous dinner sections fail closed; explicitly configured `-1` selects Grocy's built-in unsectioned calendar even when no section row exists. Breakfast/lunch are never fallback dinner sections. Errors use the existing sanitized 404/422/502/503 contracts. Meal reads that fail return an error rather than an empty success; dashboard reads retain their typed per-section unavailable states. Responses use no-store.
+
+`calendar_config.py` shares household date and dinner resolution; `meal_models.py` defines contracts; `meal_planning.py` owns business rules; `routes/meals.py` supplies the HTTP interface. Dashboard and planner use the same meal normalization in `dashboard.py`. Transport remains exclusively in `grocy_client.py`. Existing dashboard response fields remain available for future read-only consumers, with additive `type` and `recipe_servings` meal fields. No database, dependencies, stock consumption, shopping generation, authentication or TRMNL integration was added.
+
+### Meal API compatibility and local verification
+
+The field mappings and update behavior were reviewed against the official [Grocy OpenAPI specification](https://github.com/grocy/grocy/blob/master/grocy.openapi.json), [meal planner JavaScript](https://github.com/grocy/grocy/blob/master/public/viewjs/mealplan.js), [meal form](https://github.com/grocy/grocy/blob/master/views/mealplan.blade.php), and [generic API controller](https://github.com/grocy/grocy/blob/master/controllers/Api/GenericEntityApiController.php). Upstream `EditObject` updates only the supplied request fields. These are upstream master references reviewed during development, not evidence of the installed household version. Incompatible or unknown recipe types are excluded rather than assumed normal.
+
+| Operation | Upstream mapping | Required disposable local Grocy verification |
+| --- | --- | --- |
+| Create | `POST objects/meal_plan` with `day`, `type: recipe`, `recipe_id`, `recipe_servings`, `section_id` | Separate entries persist on the same date, including repeated recipes; fractional servings and chosen dinner section survive reload/restart |
+| Edit | `PUT objects/meal_plan/{id}` with supplied changed fields only | Date moves, recipe replacement and servings persist; done, note, product relationships, section and userfields remain unchanged |
+| Delete | `DELETE objects/meal_plan/{id}` | Only the selected entry disappears; other dinners, product/note entries and other sections survive |
+| Unsectioned | Explicit `section_id: -1` | Installed version accepts this sentinel without a meal_plan_sections row |
+| Search/read | `objects/recipes`, `objects/products`, `objects/meal_plan_sections`, filtered `objects/meal_plan` | Installed recipe type names/base_servings, calendar fields, permissions and enabled features match; internal recipes stay unselectable |
+
+**Meal mutations have not been verified against a running Grocy installation.** Before household use, record the version and enabled features of an explicitly authorized disposable local/test Grocy. Exercise each row above, compare raw before/after records and confirm inventory and shopping entries are unchanged. Grocy can maintain internal meal-plan recipes through its own triggers; this app does not create or modify recipe objects directly. Test API-key permissions, failed connections, and dashboard refresh as well. Never use production for these checks. Section ownership is checked before writes, but Grocy offers no atomic compare-and-swap here: concurrent external changes follow upstream last-write behavior.
+
+Local automated coverage includes backend empty/multiple dinners, search/internal exclusion, add/move/replace/servings/delete, section protection, -1, malformed data, invalid input, timezone/year boundaries, product/note preservation, upstream failures, and timeouts after persistence. Frontend API tests check paths, fields, sanitization and date arithmetic. Playwright runs the complete recipe workflow and failure/recovery/pending-write cases on desktop and mobile alongside all grocery tests. The existing CI discovery includes these files automatically. The preview remains entirely in memory; `/_test/state` now includes `meals`. Automated mocks cannot verify Grocy triggers, installed-version permissions or real persistence.
+
+Recommended next phase: complete and record disposable Grocy compatibility verification, then improve recipe details and note editing based on household feedback before adding TRMNL delivery.

@@ -14,6 +14,11 @@ class MockGrocy:
                        'qu_id': 6, 'note': 'Whole milk', 'done': 0, 'userfields': {'keep': 'value'}},
                       {'id': 102, 'shopping_list_id': 3, 'product_id': None, 'amount': 1,
                        'qu_id': None, 'note': 'Paper bags', 'done': 1}]
+        self.recipes = [{'id': '20', 'name': 'Pasta', 'type': 'normal', 'base_servings': '2'},
+                        {'id': '21', 'name': 'Curry', 'type': 'normal', 'base_servings': '4'},
+                        {'id': '22', 'name': 'Internal plan', 'type': 'mealplan-day', 'base_servings': '1'}]
+        self.sections = [{'id': '1', 'name': 'Dinner'}, {'id': '2', 'name': 'Lunch'}]
+        self.meals = []
         self.requests = []
         self.failure = None
         self.next_id = 103
@@ -60,6 +65,34 @@ class MockGrocy:
                 return httpx.Response(204)
         if path == 'stock/volatile':
             return httpx.Response(200, json={'missing_products': []})
-        if path in ('objects/recipes', 'objects/meal_plan', 'objects/meal_plan_sections'):
-            return httpx.Response(200, json=[])
+        if path == 'objects/recipes':
+            return httpx.Response(200, json=self.recipes)
+        if path == 'objects/meal_plan_sections':
+            return httpx.Response(200, json=self.sections)
+        if path == 'objects/meal_plan':
+            if request.method == 'GET':
+                entries = self.meals
+                for query in request.url.params.get_list('query[]'):
+                    if query.startswith('day>='):
+                        entries = [r for r in entries if r['day'] >= query[5:]]
+                    elif query.startswith('day<='):
+                        entries = [r for r in entries if r['day'] <= query[5:]]
+                return httpx.Response(200, json=entries)
+            if request.method == 'POST':
+                record = dict(payload, id=self.next_id)
+                self.next_id += 1
+                self.meals.append(record)
+                return httpx.Response(200, json={'created_object_id': record['id']})
+        if path.startswith('objects/meal_plan/'):
+            record = next((r for r in self.meals if r['id'] == int(path.split('/')[-1])), None)
+            if not record:
+                return httpx.Response(404)
+            if request.method == 'GET':
+                return httpx.Response(200, json=record)
+            if request.method == 'PUT':
+                record.update(payload)
+                return httpx.Response(204)
+            if request.method == 'DELETE':
+                self.meals.remove(record)
+                return httpx.Response(204)
         raise AssertionError(f'Unexpected upstream call: {request.method} {path}')

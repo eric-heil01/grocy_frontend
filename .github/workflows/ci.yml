@@ -60,7 +60,7 @@ jobs:
           cache-dependency-path: backend/requirements.txt
       - run: python -m pip install -r ../backend/requirements.txt
       - run: npx playwright install --with-deps chromium
-      - name: Grocery browser tests (desktop and mobile, mock Grocy only)
+      - name: Grocery and meal browser tests (desktop and mobile, mock Grocy only)
         env:
           E2E_PYTHON: python
         run: npm run test:browser
