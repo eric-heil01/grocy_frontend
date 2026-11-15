@@ -1,0 +1,14 @@
+services:
+  api:
+    build: ./backend
+    restart: unless-stopped
+    env_file:
+      - .env
+
+  web:
+    build: ./frontend
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - "127.0.0.1:8088:80"
