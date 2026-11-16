@@ -171,3 +171,48 @@ test('product duplicate contracts provide existing choices without treating them
     await assert.rejects(createProduct({name:'Milk',unit_id:5,location_id:1}), e => e.code === 'duplicate' && e.matches[0].id === 10)
   } finally { globalThis.fetch = original }
 })
+
+import { getInventory, getStockDetails, addStock, consumeStock, InventoryRequestError } from '../src/api.ts'
+
+test('inventory uses relative reads, reviewed stock units, and explicit entry selections', async () => {
+  const original = globalThis.fetch
+  const requests = []
+  const controller = new AbortController()
+  try {
+    globalThis.fetch = async (url, options) => {
+      requests.push([url, options.method ?? 'GET', options.body ? JSON.parse(options.body) : null, options.signal])
+      assert.equal(options.headers.Accept, 'application/json')
+      if (options.body) assert.equal(options.headers['Content-Type'], 'application/json')
+      return new Response(JSON.stringify({ ok: true }))
+    }
+    await getInventory(controller.signal)
+    await getStockDetails(10, controller.signal)
+    const reviewed = { amount: 1.5, unit_id: 5, expected_version: 'a'.repeat(64) }
+    await addStock(10, { ...reviewed, location_id: 2, best_before_date: '2031-12-01', note: 'New package' })
+    await consumeStock(10, { ...reviewed, entry_id: 202 })
+    assert.deepEqual(requests.map(r => r.slice(0, 3)), [
+      ['/api/inventory', 'GET', null],
+      ['/api/inventory/products/10', 'GET', null],
+      ['/api/inventory/products/10/add', 'POST', { ...reviewed, location_id: 2, best_before_date: '2031-12-01', note: 'New package' }],
+      ['/api/inventory/products/10/consume', 'POST', { ...reviewed, entry_id: 202 }],
+    ])
+    assert.ok(requests.slice(0, 2).every(r => r[3] === controller.signal))
+  } finally { globalThis.fetch = original }
+})
+
+test('inventory errors use safe application messages and never retry an uncertain write', async () => {
+  const original = globalThis.fetch
+  let calls = 0
+  const entry = { amount: 1, unit_id: 5, expected_version: 'a'.repeat(64), entry_id: 201 }
+  try {
+    globalThis.fetch = async () => { calls++; return new Response('SECRET', { status: 502 }) }
+    await assert.rejects(consumeStock(10, entry), error => error instanceof InventoryRequestError && error.code === 'uncertain' && !error.message.includes('SECRET'))
+    assert.equal(calls, 1)
+    for (const code of ['stale', 'unsupported', 'configuration', 'insufficient', 'validation']) {
+      globalThis.fetch = async () => new Response(JSON.stringify({ detail: { code, message: 'SECRET' } }), { status: 409 })
+      await assert.rejects(consumeStock(10, entry), error => error instanceof InventoryRequestError && error.code === code && !error.message.includes('SECRET'))
+    }
+    globalThis.fetch = async () => new Response(JSON.stringify({ detail: { code: 'SECRET', message: 'SECRET' } }), { status: 502 })
+    await assert.rejects(consumeStock(10, entry), error => error.code === 'uncertain' && !error.message.includes('SECRET'))
+  } finally { globalThis.fetch = original }
+})

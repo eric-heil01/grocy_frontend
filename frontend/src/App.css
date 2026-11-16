@@ -54,7 +54,7 @@ main { max-width: 1160px; margin: auto; padding: 0 28px 28px; }
   .app-header { padding: 16px 18px; }
   .brand { font-size: 1.45rem; }
   .desktop-navigation { display: none; }
-  .mobile-navigation { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); position: fixed; z-index: 10; bottom: 0; left: 0; right: 0; padding: 8px 8px calc(8px + env(safe-area-inset-bottom)); background: #fff; border-top: 1px solid var(--border); box-shadow: 0 -3px 16px #243b3208; }
+  .mobile-navigation { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); position: fixed; z-index: 10; bottom: 0; left: 0; right: 0; padding: 8px 8px calc(8px + env(safe-area-inset-bottom)); background: #fff; border-top: 1px solid var(--border); box-shadow: 0 -3px 16px #243b3208; }
   .mobile-navigation a { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-height: 60px; padding: 5px 2px; color: var(--muted); font-size: .8rem; text-decoration: none; border-radius: 10px; }
   .mobile-navigation a[aria-current=page] { color: #23472f; background: #e5eddf; font-weight: 750; }
   .page-toolbar { padding-top: 18px; }

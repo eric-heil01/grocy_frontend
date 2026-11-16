@@ -5,6 +5,7 @@ export default function AppHeader({ page, onAdd }: { page: string; onAdd: () => 
   const sections: { href: string; label: string; icon: IconName }[] = [
     { href: '#', label: 'Home', icon: 'home' }, { href: '#groceries', label: 'Groceries', icon: 'groceries' },
     { href: '#meals', label: 'Meals', icon: 'meals' }, { href: '#products', label: 'Products', icon: 'products' },
+    { href: '#inventory', label: 'Inventory', icon: 'inventory' },
   ]
   const links = sections.map(({ href, label, icon }) => <a key={href} href={href} aria-current={page === href ? 'page' : undefined}><Icon name={icon} /><span>{label}</span></a>)
   return <>

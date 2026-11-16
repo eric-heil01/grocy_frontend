@@ -1,6 +1,6 @@
 # Grocy Frontend
 
-A mobile-friendly household dashboard, grocery manager, dinner planner, and product catalog for Grocy. Grocy remains the source of truth; no separate database is used. Dinners can be planned using existing recipes; inventory remains read-only. Grocery entries can be added, edited, completed/undone, and removed without recording an inventory purchase.
+A mobile-friendly household dashboard, grocery manager, dinner planner, product catalog, and inventory manager for Grocy. Grocy remains the source of truth; no separate database is used. Inventory supports explicit purchased-stock additions and selected-batch consumption, each with review and confirmation. Grocery entries remain separate from inventory purchases, and dinners use existing recipes.
 
 ## Native local development
 
@@ -250,7 +250,7 @@ Open **Products** in the shared navigation or `/#products`. Browse or search the
 
 Saving a product creates only its definition. It does not put anything in stock or on the shopping list. **Create new product** is always available beside grocery search, including when matches exist, and prefills the search text. A confirmed save closes the focused dialog, selects the new product, announces success, and focuses **Add to list**. The selected shopping list, quantity, and note are retained. The user must still choose **Add to list** separately. Duplicate detection can select an existing active product instead. Inactive definitions are shown to prevent accidental recreation, but cannot be selected for groceries. Cancelling creation leaves the grocery draft intact.
 
-On phones, the Home, Groceries, Meals, and Products navigation stays at the bottom with icons, text labels, an active section, and safe-area padding. Desktop uses the same sections in the header. Visited pages keep drafts mounted while hidden; each shopping list retains its own add-item draft for this browser session. Browser reload/close warns about unsaved input where supported. Drafts are not stored persistently. See [the Phase 4.5 report](docs/phase-4.5-ux.md) for implementation, validation, and limitations.
+On phones, the Home, Groceries, Meals, Products, and Inventory navigation stays at the bottom with icons, text labels, an active section, and safe-area padding. Desktop uses the same sections in the header. Visited pages keep drafts mounted while hidden; each shopping list retains its own add-item draft for this browser session. Browser reload/close warns about unsaved input where supported. Drafts are not stored persistently. See [the Phase 4.5 report](docs/phase-4.5-ux.md) for implementation, validation, and limitations.
 
 Exact name duplicates are blocked server-side after Unicode NFKC normalization, case folding, and whitespace normalization, including inactive products. Substring and close-spelling candidates require an explicit **This is a different product** acknowledgement; exact duplicates cannot be overridden. The browser shows immediate substring suggestions and the server also checks spelling similarity before every relevant write. Suggestions are heuristic, not proof that two products are the same. Use descriptive names for genuinely different sizes or varieties; selecting a unit never infers package contents.
 
@@ -294,4 +294,14 @@ No production installation was contacted. Existing Compose files, license, crede
 
 Potential confusion to address in household onboarding: a saved product is not current stock; a bottle is not a known number of grams or cartons; zero due days means the addition day; an inactive existing product cannot be used for groceries here. Larger catalogs are fetched server-side and browsed in full without pagination; specialized unit conversions, activation, images, barcodes and advanced parent-product settings remain in Grocy.
 
-For Phase 5, first record disposable-instance compatibility results. Then add a separate, explicit **Add what you have** journey with quantity, actual storage place and package date, a review step before stock transactions, and the same uncertain-write recovery. Keep product setup distinct from purchases, consumption and inventory corrections, and resolve unit conversions explicitly before supporting mixed purchase/stock units.
+Phase 5 adds the separate inventory journey described below. Disposable-instance compatibility verification remains required before household stock mutations. Product setup, groceries, and stock remain separate; package conversions are not inferred.
+
+## Intuitive inventory management (Phase 5)
+
+Open **Inventory** in the shared navigation or at `/#inventory`. **What do I have?** searches current stock and shows quantities, configured measurement units, separate places and batches, package dates, opened state and running-low indicators. **I bought some** selects a product, quantity, actual place, explicit package date or no-expiry choice, and optional note. **I used some** selects the exact batch actually used. Both actions require review and confirmation, then refresh the quantities.
+
+Groceries and inventory share the product picker and contextual creation dialog. Creating a definition preserves the stock draft and selects the new product; stock changes only after its own separate confirmation. Unsupported tare/no-own-stock products and ambiguous batches defer to Grocy. No conversion, package content or expiration date is guessed. Automatic shopping additions must be disabled for the connected Grocy user; the backend checks the effective setting before every stock write and never changes that setting automatically.
+
+The dedicated endpoints are `GET /api/inventory`, `GET /api/inventory/products/{product_id}`, `POST /api/inventory/products/{product_id}/add`, and `POST /api/inventory/products/{product_id}/consume`. Writes use reviewed versions, stock-unit quantities and explicit locations/batches. Duplicate submissions are disabled, unexpected results pause mutations until a successful explicit refresh, and uncertain writes are never automatically retried. A refresh shows current quantities without proving a timed-out request failed.
+
+**Real Grocy stock mutations remain unverified.** Before household use, complete the [Phase 5 disposable-instance checklist](docs/phase-5-inventory.md#disposable-grocy-verification-before-household-mutations). The same report documents files, contracts, official source mappings, automated test results, concurrency/compatibility limits and Phase 6 recommendations. Automated tests use only an isolated in-memory Grocy fixture; no production system was contacted.

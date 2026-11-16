@@ -1,11 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
-import { addGroceryItem, getGroceryEntries, getGroceryLists, removeGroceryItem, searchProducts, updateGroceryItem } from './api'
+import { addGroceryItem, getGroceryEntries, getGroceryLists, removeGroceryItem, updateGroceryItem } from './api'
 import type { GroceryCreate, GroceryEntries, GroceryItem, GroceryLists, ProductOption } from './api'
 import './Groceries.css'
-import { ProductCreationDialog } from './ProductCreationDialog'
+import ProductPicker from './ProductPicker'
 import useUnsavedChanges from './useUnsavedChanges'
-import Icon from './Icon'
 
 function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : 'Unable to complete the request. Please refresh the list.'
@@ -24,23 +23,14 @@ type AddItemProps = {
 }
 
 function AddItem({ disabled, onAdd, onProductBusy, initialDraft, onDraftChange, productRevision, onProductCreated }: AddItemProps) {
-  const [creating, setCreating] = useState(false)
   const [mode, setMode] = useState<'product' | 'text'>(initialDraft?.mode ?? 'product')
   const [query, setQuery] = useState(initialDraft?.query ?? '')
   const [product, setProduct] = useState<ProductOption | null>(initialDraft?.product ?? null)
-  const [results, setResults] = useState<ProductOption[]>([])
-  const [searching, setSearching] = useState(Boolean(initialDraft?.query && !initialDraft.product))
-  const [searchError, setSearchError] = useState('')
   const [amount, setAmount] = useState(initialDraft?.amount ?? '1')
   const [note, setNote] = useState(initialDraft?.note ?? '')
   useEffect(() => { onDraftChange({ mode, query, product, amount, note }) }, [mode, query, product, amount, note, onDraftChange])
-  const [creationNotice, setCreationNotice] = useState('')
   const addButton = useRef<HTMLButtonElement>(null)
-  const focusAfterCreation = useRef(false)
   useUnsavedChanges(Boolean(query || note || amount !== '1'))
-  useEffect(() => {
-    if (!creating && focusAfterCreation.current) { addButton.current?.focus(); focusAfterCreation.current = false }
-  }, [creating])
   const searchInput = useRef<HTMLInputElement>(null)
   const focusAfterSave = useRef(false)
   useEffect(() => {
@@ -50,20 +40,9 @@ function AddItem({ disabled, onAdd, onProductBusy, initialDraft, onDraftChange, 
     }
   }, [disabled])
 
-  useEffect(() => {
-    if (mode !== 'product' || product || !query.trim()) return
-    const controller = new AbortController()
-    const timer = setTimeout(() => {
-      setSearching(true); setSearchError('')
-      searchProducts(query.trim(), controller.signal).then(setResults).catch(error => {
-        if (!controller.signal.aborted) setSearchError(errorMessage(error))
-      }).finally(() => { if (!controller.signal.aborted) setSearching(false) })
-    }, 200)
-    return () => { clearTimeout(timer); controller.abort() }
-  }, [query, product, mode, productRevision])
 
   function reset() {
-    setQuery(''); setProduct(null); setResults([]); setNote(''); setAmount('1'); setSearchError(''); setCreationNotice('')
+    setQuery(''); setProduct(null); setNote(''); setAmount('1')
     focusAfterSave.current = true
   }
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -74,34 +53,14 @@ function AddItem({ disabled, onAdd, onProductBusy, initialDraft, onDraftChange, 
 
   return <section className="card add-item" aria-labelledby="add-heading">
     <h2 id="add-heading">Add an item</h2>
-    <p className="product-created" role="status">{creationNotice}</p>
-    {creating && <ProductCreationDialog initialName={query.trim()} onBusy={onProductBusy} onCancel={() => setCreating(false)} onChoose={(created, saved) => {
-      setProduct({ id: created.id, name: created.name, unit_id: created.unit_id, unit_name: created.unit_name }); setQuery(created.name); setResults([]); setSearching(false); setSearchError(''); setCreating(false)
-      setCreationNotice(saved ? `Product saved: ${created.name}. Choose Add to list when you’re ready.` : `${created.name} selected. Choose Add to list when you’re ready.`)
-      focusAfterCreation.current = true
-      if (saved) onProductCreated()
-    }} />}<form onSubmit={submit}>
+    <form onSubmit={submit}>
       <fieldset disabled={disabled}>
         <legend className="sr-only">New grocery item</legend>
         <div className="entry-mode" aria-label="Item type">
-          <button type="button" aria-pressed={mode === 'product'} onClick={() => { setMode('product'); setSearching(!product && Boolean(query.trim())) }}>Existing product</button>
-          <button type="button" aria-pressed={mode === 'text'} onClick={() => { setMode('text'); setSearching(false) }}>Free-text item</button>
+          <button type="button" aria-pressed={mode === 'product'} onClick={() => { setMode('product') }}>Existing product</button>
+          <button type="button" aria-pressed={mode === 'text'} onClick={() => { setMode('text') }}>Free-text item</button>
         </div>
-        {mode === 'product' && <div className="product-search">
-          <label htmlFor="product-search">Find a product</label>
-          <input ref={searchInput} id="product-search" type="search" value={query} maxLength={100} autoComplete="off"
-            aria-describedby="search-help" onChange={event => {
-              setQuery(event.target.value); setProduct(null); setResults([]); setSearchError(''); setSearching(Boolean(event.target.value.trim()))
-            }} />
-          <small id="search-help">Search by name, then select a result.</small>
-          {searching && <p role="status">Searching products...</p>}
-          {searchError && <p role="alert">{searchError} Change the search to try again.</p>}
-          {!product && results.length > 0 && <ul className="search-results" aria-label="Product results">{results.map(result => <li key={result.id}>
-            <button type="button" onClick={() => { setProduct(result); setQuery(result.name); setResults([]); setSearching(false) }}>{result.name}<small>{result.unit_name ?? 'Unit unavailable'}</small></button>
-          </li>)}</ul>}
-          {!product && query.trim() && !searching && !searchError && results.length === 0 && <div><p className="muted">No matching products. Create a new product below, try another name, or add a free-text item.</p></div>}
-          <button className="create-product-link" type="button" onClick={() => { setCreationNotice(''); setCreating(true) }}><Icon name="plus" />Create new product</button>{product && <p className="selected-product">Selected: <strong>{product.name}</strong></p>}
-        </div>}
+        {mode === 'product' && <ProductPicker query={query} product={product} onChange={(text, selectedProduct) => { setQuery(text); setProduct(selectedProduct) }} disabled={disabled} revision={productRevision} onCreated={onProductCreated} onBusy={onProductBusy} inputRef={searchInput} onAfterCreate={() => addButton.current?.focus()} />}
         <div className="add-fields">
           <label>Quantity{product && mode === 'product' && <small>in {product.unit_name ?? 'stock units'}</small>}
             <input type="number" inputMode="decimal" min="0.000000001" max="1000000000" step="any" required value={amount} onChange={event => setAmount(event.target.value)} />

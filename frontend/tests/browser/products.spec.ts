@@ -213,7 +213,7 @@ test('an edit saved before a connection failure stays locked until refreshed', a
 })
 
 test('global creation is visible on every major screen and Escape restores focus', async ({ page }) => {
-  for (const hash of ['', '#groceries', '#meals', '#products']) {
+  for (const hash of ['', '#groceries', '#meals', '#products', '#inventory']) {
     await page.goto(`/${hash}`)
     const add = page.getByRole('button', { name: 'Add product', exact: true })
     await expect(add).toBeVisible()

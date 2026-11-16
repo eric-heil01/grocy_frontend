@@ -1,0 +1,7 @@
+﻿.shared-product-picker label { display: flex; flex-direction: column; font-weight: 600; margin-bottom: 6px; }
+.shared-product-picker .search-results { max-height: 280px; overflow: auto; border: 1px solid var(--border); border-radius: 10px; }
+.shared-product-picker .search-results li + li { border-top: 1px solid var(--border); }
+.shared-product-picker .search-results button { width: 100%; border: 0; border-radius: 0; text-align: left; min-height: 54px; }
+.shared-product-picker .create-product-link { display: flex; align-items: center; gap: 8px; width: 100%; margin: 14px 0; color: #284d39; background: #f4f7ef; border-color: #78967e; text-align: left; }
+.shared-product-picker .selected-product { margin-top: 12px; }
+.shared-product-picker .product-created { padding: 12px; margin-top: 14px; border-radius: 10px; background: #edf4e6; }

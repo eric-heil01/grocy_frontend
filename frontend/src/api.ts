@@ -122,3 +122,46 @@ export const getProductSetup = (signal?: AbortSignal) => productRequest<ProductS
 export const getProductDetails = (id: number, signal?: AbortSignal) => productRequest<ProductDetails>(`/${id}`, { signal })
 export const createProduct = (entry: NewProduct) => productRequest<ProductDetails>('', { method: 'POST', body: JSON.stringify(entry) })
 export const editProduct = (id: number, version: string, changes: ProductFields) => productRequest<ProductDetails>(`/${id}`, { method: 'PATCH', body: JSON.stringify({ ...changes, expected_version: version }) })
+
+export interface StockEntry {
+  id: number; amount: number; location_id: number | null; location_name: string | null
+  due_date: string | null; never_expires: boolean; opened: boolean; purchased_date: string | null
+  note: string | null; selectable: boolean
+}
+export interface StockProduct {
+  id: number; name: string; amount: number; unit_id: number | null; unit_name: string | null
+  default_location_id: number | null; running_low: boolean; due_type: number | null
+  entries: StockEntry[]; version: string; manage_reason: string | null
+}
+export interface InventoryOverview { today: string; products: StockProduct[]; track_dates: boolean; track_locations: boolean }
+export interface StockDetails { product: StockProduct; locations: { id: number; name: string }[]; track_dates: boolean; track_locations: boolean }
+export interface StockChange { amount: number; unit_id: number; expected_version: string }
+export interface StockAdd extends StockChange { location_id: number; best_before_date?: string; never_expires?: boolean; note: string }
+export interface StockConsume extends StockChange { entry_id: number }
+export class InventoryRequestError extends Error {
+  code: string
+  constructor(message: string, code = 'uncertain') { super(message); this.code = code }
+}
+async function inventoryRequest<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const response = await fetch(`/api/inventory${path}`, { ...options, headers: { Accept: 'application/json', ...(options.body ? { 'Content-Type': 'application/json' } : {}) } })
+  if (!response.ok) {
+    const body = await response.json().catch(() => null)
+    const code = body?.detail?.code
+    const messages: Record<string, string> = {
+      stale: 'This product or its stock changed. Refresh inventory and review your change again.',
+      unsupported: 'This product or batch needs special handling. Use Grocy to change it.',
+      configuration: 'Inventory is disabled, or automatic shopping additions are enabled for the connected Grocy user. Check Grocy settings before changing stock.',
+      insufficient: 'There is not enough in the selected batch. Choose a smaller quantity.',
+      validation: 'Check the quantity, measurement unit, location, and package date.',
+      uncertain: 'This change may have been saved. Refresh inventory and check the quantities before recording another change.',
+    }
+    if (Object.hasOwn(messages, code)) throw new InventoryRequestError(messages[code], code)
+    if (response.status === 422) throw new InventoryRequestError(messages.validation, 'validation')
+    throw new InventoryRequestError(messages.uncertain)
+  }
+  return response.json()
+}
+export const getInventory = (signal?: AbortSignal) => inventoryRequest<InventoryOverview>('', { signal })
+export const getStockDetails = (id: number, signal?: AbortSignal) => inventoryRequest<StockDetails>(`/products/${id}`, { signal })
+export const addStock = (id: number, entry: StockAdd) => inventoryRequest<{ ok: boolean }>(`/products/${id}/add`, { method: 'POST', body: JSON.stringify(entry) })
+export const consumeStock = (id: number, entry: StockConsume) => inventoryRequest<{ ok: boolean }>(`/products/${id}/consume`, { method: 'POST', body: JSON.stringify(entry) })

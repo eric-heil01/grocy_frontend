@@ -13,7 +13,7 @@ test('shared navigation has active labels and mobile bottom placement across maj
   await page.keyboard.press('Enter')
   await expect(page.getByRole('main')).toBeFocused()
   await expect(page.getByRole('navigation', { name: 'Household shortcuts' }).getByRole('link')).toHaveCount(3)
-  for (const [label, heading] of [['Groceries', 'Your grocery list.'], ['Meals', 'Plan your dinners.'], ['Products', 'Your products.'], ['Home', 'Your household, at a glance.']]) {
+  for (const [label, heading] of [['Groceries', 'Your grocery list.'], ['Meals', 'Plan your dinners.'], ['Products', 'Your products.'], ['Inventory', 'Your inventory.'], ['Home', 'Your household, at a glance.']]) {
     await navigation(page).getByRole('link', { name: label, exact: true }).click()
     await expect(page.getByRole('heading', { name: heading, exact: true })).toBeVisible()
     await expect(navigation(page).getByRole('link', { name: label, exact: true })).toHaveAttribute('aria-current', 'page')

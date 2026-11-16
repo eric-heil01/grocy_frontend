@@ -26,6 +26,13 @@ class MockGrocy:
         self.requests = []
         self.failure = None
         self.next_id = 103
+        self.config = {'FEATURE_FLAG_STOCK': True, 'FEATURE_FLAG_STOCK_LOCATION_TRACKING': True, 'FEATURE_FLAG_STOCK_BEST_BEFORE_DATE_TRACKING': True}
+        self.stock = [
+            {'id': 201, 'product_id': 10, 'amount': 2, 'location_id': 1, 'best_before_date': '2030-12-01', 'purchased_date': '2026-01-01', 'stock_id': 'batch-fridge', 'open': 0, 'note': 'First batch'},
+            {'id': 202, 'product_id': 10, 'amount': 1, 'location_id': 2, 'best_before_date': '2031-01-01', 'purchased_date': '2026-02-01', 'stock_id': 'batch-cupboard', 'open': 1, 'note': 'Second batch'},
+        ]
+        for product in self.products:
+            product.update(enable_tare_weight_handling=0, no_own_stock=0, due_type=1)
 
     def __call__(self, request):
         path = request.url.path.removeprefix('/api/')
@@ -37,6 +44,29 @@ class MockGrocy:
             return httpx.Response(200, text='not json SECRET')
         if self.failure:
             return httpx.Response(self.failure, json={'error_message': 'SECRET upstream body'})
+        if path == 'system/config':
+            return httpx.Response(200, json=self.config)
+        if path == 'stock':
+            return httpx.Response(200, json=[{'product_id': identifier} for identifier in sorted({r['product_id'] for r in self.stock})])
+        if path.startswith('stock/products/'):
+            identifier = int(path.split('/')[2])
+            entries = [r for r in self.stock if r['product_id'] == identifier]
+            if path.endswith('/entries'):
+                return httpx.Response(200, json=entries)
+            if request.method == 'POST' and path.endswith('/add'):
+                record = dict(id=self.next_id, product_id=identifier, amount=payload['amount'], location_id=payload['location_id'], best_before_date=payload.get('best_before_date', '2026-01-01'), purchased_date='2026-01-01', stock_id=f'batch-{self.next_id}', open=0, note=payload.get('note'))
+                self.stock.append(record)
+                self.next_id += 1
+                return httpx.Response(200, json=[dict(record, transaction_id='mock-add', transaction_type='purchase')])
+            if request.method == 'POST' and path.endswith('/consume'):
+                matching = [r for r in entries if r['stock_id'] == payload['stock_entry_id'] and r['location_id'] == payload['location_id']]
+                if len(matching) != 1 or payload['amount'] > matching[0]['amount']:
+                    return httpx.Response(400, text='Not enough in this batch')
+                record = matching[0]
+                record['amount'] -= payload['amount']
+                if record['amount'] == 0:
+                    self.stock.remove(record)
+                return httpx.Response(200, json=[dict(product_id=identifier, transaction_id='mock-consume', transaction_type='consume', amount=-payload['amount'], stock_id=payload['stock_entry_id'], location_id=payload['location_id'])])
         if path == 'objects/shopping_lists':
             return httpx.Response(200, json=self.lists)
         if path == 'user/settings':
@@ -51,6 +81,7 @@ class MockGrocy:
                 assert required <= payload.keys(), 'Missing required fields'
                 record = dict(payload, id=self.next_id)
                 self.next_id += 1
+                record.update(enable_tare_weight_handling=0, no_own_stock=0, due_type=1)
                 self.products.append(record)
                 return httpx.Response(200, json={'created_object_id': record['id']})
         if path == 'objects/quantity_units':
@@ -86,7 +117,7 @@ class MockGrocy:
                 self.items.remove(record)
                 return httpx.Response(204)
         if path == 'stock/volatile':
-            return httpx.Response(200, json={'missing_products': []})
+            return httpx.Response(200, json={'missing_products': [dict(id=int(p['id']), name=p['name'], amount_missing=float(p['min_stock_amount']) - sum(float(r['amount']) for r in self.stock if r['product_id'] == int(p['id']))) for p in self.products if float(p['min_stock_amount']) > sum(float(r['amount']) for r in self.stock if r['product_id'] == int(p['id']))]})
         if path == 'objects/recipes':
             return httpx.Response(200, json=self.recipes)
         if path == 'objects/meal_plan_sections':
