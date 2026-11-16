@@ -3,7 +3,7 @@ import type { FormEvent } from 'react'
 import { addGroceryItem, getGroceryEntries, getGroceryLists, removeGroceryItem, searchProducts, updateGroceryItem } from './api'
 import type { GroceryCreate, GroceryEntries, GroceryItem, GroceryLists, ProductOption } from './api'
 import './Groceries.css'
-import Products from './Products'
+import { ProductCreationDialog } from './ProductCreationDialog'
 
 function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : 'Unable to complete the request. Please refresh the list.'
@@ -53,9 +53,9 @@ function AddItem({ disabled, onAdd, onProductBusy }: { onProductBusy: (busy: boo
 
   return <section className="card add-item" aria-labelledby="add-heading">
     <h2 id="add-heading">Add an item</h2>
-    {creating ? <Products embedded initialName={query.trim()} onBusy={onProductBusy} onCancel={() => setCreating(false)} onChoose={created => {
+    {creating && <ProductCreationDialog initialName={query.trim()} onBusy={onProductBusy} onCancel={() => setCreating(false)} onChoose={created => {
       setProduct({ id: created.id, name: created.name, unit_id: created.unit_id, unit_name: created.unit_name }); setQuery(created.name); setResults([]); setSearching(false); setSearchError(''); setCreating(false)
-    }} /> : <form onSubmit={submit}>
+    }} />}<form onSubmit={submit}>
       <fieldset disabled={disabled}>
         <legend className="sr-only">New grocery item</legend>
         <div className="entry-mode" aria-label="Item type">
@@ -74,8 +74,8 @@ function AddItem({ disabled, onAdd, onProductBusy }: { onProductBusy: (busy: boo
           {!product && results.length > 0 && <ul className="search-results" aria-label="Product results">{results.map(result => <li key={result.id}>
             <button type="button" onClick={() => { setProduct(result); setQuery(result.name); setResults([]); setSearching(false) }}>{result.name}<small>{result.unit_name ?? 'Unit unavailable'}</small></button>
           </li>)}</ul>}
-          {!product && query.trim() && !searching && !searchError && results.length === 0 && <div><p className="muted">No matching products. Try another name or add a free-text item.</p><button type="button" onClick={() => setCreating(true)}>Create this product</button></div>}
-          {product && <p className="selected-product">Selected: <strong>{product.name}</strong></p>}
+          {!product && query.trim() && !searching && !searchError && results.length === 0 && <div><p className="muted">No matching products. Create a new product below, try another name, or add a free-text item.</p></div>}
+          <button type="button" onClick={() => setCreating(true)}>Create new product</button>{product && <p className="selected-product">Selected: <strong>{product.name}</strong></p>}
         </div>}
         <div className="add-fields">
           <label>Quantity{product && mode === 'product' && <small>in {product.unit_name ?? 'stock units'}</small>}
@@ -87,7 +87,7 @@ function AddItem({ disabled, onAdd, onProductBusy }: { onProductBusy: (busy: boo
         </div>
         <button className="primary" disabled={mode === 'product' ? !product || !product.unit_id : !note.trim()} type="submit">Add to list</button>
       </fieldset>
-    </form>}
+    </form>
   </section>
 }
 
@@ -193,8 +193,8 @@ export default function Groceries() {
   }
 
   return <main className="grocery-page">
-    <header><a className="brand" href="#">grocy<span> / groceries</span></a><button disabled={loading || busy || productBusy} onClick={refresh}>Refresh</button></header>
-    <nav aria-label="Main navigation">{busy || productBusy ? <span>Saving to Grocy...</span> : <a href="#">Back to dashboard</a>}</nav>
+    <div className="product-actions"><button disabled={loading || busy || productBusy} onClick={refresh}>Refresh</button></div>
+    <nav aria-label="Page navigation">{busy || productBusy ? <span>Saving to Grocy...</span> : <a href="#">Back to dashboard</a>}</nav>
     <div className="intro"><p className="eyebrow">ONE LESS THING TO REMEMBER</p><h1>Your grocery list.</h1><p>Add what you need. Check it off as you shop.</p></div>
     {catalog && catalog.lists.length > 0 && <label className="list-selector">Shopping list<select value={selected ?? ''} disabled={busy || productBusy} onChange={event => {
       setSelected(Number(event.target.value)); setEntries(null); setLoading(true); setError(''); setStatus(''); setNeedsRefresh(false)

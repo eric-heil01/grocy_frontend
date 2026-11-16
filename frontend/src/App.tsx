@@ -5,6 +5,8 @@ import './App.css'
 import Groceries from './Groceries'
 import Meals from './Meals'
 import Products from './Products'
+import { ProductCreationDialog } from './ProductCreationDialog'
+import AppHeader from './AppHeader'
 
 function MealNames({ day }: { day: MealDay }) {
   if (!day.available) return <span className="muted">Dinner information unavailable</span>
@@ -31,7 +33,7 @@ function DashboardHome() {
   }, [attempt])
 
   return <main>
-    <header><a className="brand" href="#">grocy<span> / home</span></a><div className="product-actions"><a href="#products">Manage products</a><button disabled={loading} onClick={refresh}>Refresh</button></div></header>
+    <div className="product-actions"><button disabled={loading} onClick={refresh}>Refresh</button></div>
     <div className="intro"><p className="eyebrow">A LITTLE LESS TO THINK ABOUT</p><h1>Your household, at a glance.</h1><p>Tonight's dinner. The next shop. The week ahead.</p></div>
     {loading && <p role="status" className="message">Loading your household...</p>}
     {error && <div role="alert" className="message error">{error} <button onClick={refresh}>Try again</button></div>}
@@ -50,11 +52,13 @@ function DashboardHome() {
 }
 
 export default function App() {
+  const [creating, setCreating] = useState(false)
+  const [productRevision, setProductRevision] = useState(0)
   const [page, setPage] = useState(window.location.hash)
   useEffect(() => {
     const onHashChange = () => { setPage(window.location.hash); window.scrollTo(0, 0) }
     window.addEventListener('hashchange', onHashChange)
     return () => window.removeEventListener('hashchange', onHashChange)
   }, [])
-  return page === '#groceries' ? <Groceries /> : page === '#meals' ? <Meals /> : page === '#products' ? <Products /> : <DashboardHome />
+  return <><AppHeader page={page} onAdd={() => setCreating(true)} />{page === '#groceries' ? <Groceries /> : page === '#meals' ? <Meals /> : page === '#products' ? <Products revision={productRevision} /> : <DashboardHome />}{creating && <ProductCreationDialog onCancel={() => { setCreating(false); setProductRevision(n => n + 1) }} onChoose={() => { setProductRevision(n => n + 1); setCreating(false) }} />}</>
 }

@@ -184,3 +184,11 @@ header {
     font-size:2rem
   }
 }
+.app-header { max-width:1112px; margin:auto; gap:16px; flex-wrap:wrap; padding:20px 16px; }
+.app-header nav { display:flex; flex-wrap:wrap; gap:8px 16px; }
+.app-header nav a { min-height:48px; display:inline-flex; align-items:center; }
+.app-header [aria-current=page] { font-weight:750; text-decoration-thickness:3px; }
+.app-header .primary, .product-form button[type=submit] { background:#243b32; color:white; min-height:48px; }
+.creation-dialog { width:min(720px, calc(100% - 24px)); max-height:90dvh; overflow:auto; border:1px solid #9eafa3; border-radius:16px; padding:24px; color:#243b32; background:#f7f7f0; }
+.creation-dialog::backdrop { background:#172b24aa; }
+@media(max-width:600px) { .app-header nav { order:3; width:100%; } .app-header > button { margin-left:auto; } .creation-dialog { padding:16px; } }

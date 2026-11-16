@@ -93,7 +93,7 @@ export default function Meals() {
   }
   const disabled = busy || locked
   return <main className="meal-page">
-    <header><a className="brand" href="#">grocy<span> / dinners</span></a><button disabled={busy} onClick={() => void load(week?.start)}>Refresh dinners</button></header>
+    <div className="product-actions"><button disabled={busy} onClick={() => void load(week?.start)}>Refresh dinners</button></div>
     <nav><a href="#">Back to dashboard</a></nav>
     <div className="intro"><p className="eyebrow">AT THE TABLE</p><h1>Plan your dinners.</h1><p>Seven days, one less thing to think about.</p></div>
     {error && <p role="alert" className="message error">{error} Editing is paused until Refresh dinners succeeds.</p>}
