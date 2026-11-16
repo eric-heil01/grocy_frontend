@@ -22,3 +22,16 @@
 .embedded-products .card, .embedded-products .product-form { padding: 16px; }
 .product-status { min-height: 28px; }
 @media (min-width: 850px) { main.product-page .product-browser ul { grid-template-columns: 1fr 1fr; } }
+.product-status:empty { display: none; }
+.product-page .intro { padding-bottom: 8px; }
+.product-page .product-browser { margin-top: 22px; }
+.product-page .product-form { max-width: none; }
+.creation-dialog .product-form { padding: 0; border: 0; border-radius: 0; margin: 8px 0 0; }
+.creation-dialog .product-help { font-size: .88rem; margin: 6px 0 18px; }
+.creation-dialog .product-actions { margin: 16px 0 0; }
+.creation-dialog .product-actions button[type=submit] { flex: 1; }
+.creation-dialog .embedded-products { padding-bottom: 0; }
+.creation-dialog details { padding: 12px 16px; }
+.creation-dialog .duplicate-products li + li { margin-top: 8px; }
+.product-detail p + p { margin-top: 8px; }
+.product-browser li button { min-height: 80px; padding: 16px; border-color: var(--border); }

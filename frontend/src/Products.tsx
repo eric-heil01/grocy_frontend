@@ -79,7 +79,7 @@ export default function Products({ embedded = false, initialName = '', onChoose,
   }
   const disabled = busy || locked
   const content = <>
-    <div className="product-actions">{!busy && <button disabled={busy} onClick={() => void load(embedded)}>Refresh products</button>}{embedded && <button disabled={busy} onClick={onCancel}>Return to previous screen</button>}</div>
+    {(!embedded || locked || !setup || detail) && <div className="product-actions">{!busy && (!embedded || locked) && <button onClick={() => void load(embedded)}>Refresh products</button>}{embedded && <button disabled={busy && Boolean(setup)} onClick={onCancel}>Return to previous screen</button>}</div>}
     <p role="status" className="product-status">{busy ? 'Loading or saving products...' : status}</p>
     {error && <div role="alert" className="message error">{error}{locked && <p>Saving is paused until Refresh products succeeds. Review the current list before trying again.</p>}</div>}
     {conflict?.matches.length ? <aside aria-label="Products to review"><p>Review these existing products:</p><ul>{conflict.matches.map(match => <li key={match.id}><button disabled={disabled} onClick={() => { const p = catalog.find(p => p.id === match.id); if (p) choose(p) }}>Open {match.name}</button></li>)}</ul>{conflict.code === 'similar' && <p>If yours is different, confirm below that yours is a different product.</p>}</aside> : null}
@@ -91,5 +91,5 @@ export default function Products({ embedded = false, initialName = '', onChoose,
     </section>}
   </>
   if (embedded) return <section className="product-page embedded-products" aria-label="Create or choose a product">{content}</section>
-  return <main className="product-page"><nav>{busy ? <span>Loading or saving...</span> : <a href="#">Back to dashboard</a>}</nav><div className="intro"><p className="eyebrow">MAKE IT FAMILIAR</p><h1>Your products.</h1><p>Save the things your household uses, and where you keep them.</p></div>{content}</main>
+  return <main tabIndex={-1} className="product-page"><div className="intro"><p className="eyebrow">MAKE IT FAMILIAR</p><h1 tabIndex={-1}>Your products.</h1><p>Save the things your household uses, and where you keep them.</p></div>{content}</main>
 }

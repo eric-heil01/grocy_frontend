@@ -16,6 +16,13 @@ async function fillNew(page: Page, name = 'Coffee') {
 const details = (page: Page) => page.getByRole('region', { name: 'Product details', exact: true }).last()
 const browse = (page: Page) => page.getByRole('region', { name: 'Browse products', exact: true })
 
+async function showSaved(page: Page, name: string) {
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+  await expect(page.locator('.app-notice')).toContainText(`Product saved: ${name}`)
+  await browse(page).getByRole('button', { name, exact: false }).click()
+  await expect(details(page)).toContainText(name)
+}
+
 test.beforeEach(async ({ request }) => { expect((await request.post('/_test/reset')).ok()).toBeTruthy() })
 
 test('browses searches opens and edits a product with unchanged units and unrelated fields', async ({ page }) => {
@@ -54,8 +61,7 @@ test('creates with understandable unit and location choices and optional setting
   await page.getByLabel('This product never becomes overdue', { exact: true }).check()
   await page.screenshot({ path: testInfo.outputPath('product-form.png'), fullPage: true })
   await page.getByRole('button', { name: 'Save product', exact: true }).click()
-  await expect(page.getByRole('dialog').getByRole('status')).toContainText('Product saved.')
-  await expect(details(page)).toContainText('Coffee')
+  await showSaved(page, 'Coffee')
   const state = await (await page.request.get('/_test/state')).json()
   expect(state.products).toHaveLength(4)
   expect(state.items).toHaveLength(2)
@@ -76,7 +82,7 @@ test('detects exact and similar duplicates and offers the existing product', asy
   await expect(page.getByRole('button', { name: 'Save product', exact: true })).toBeDisabled()
   await page.getByLabel('This is a different product.', { exact: true }).check()
   await page.getByRole('button', { name: 'Save product', exact: true }).click()
-  await expect(details(page)).toContainText('Milk chocolate')
+  await showSaved(page, 'Milk chocolate')
   const state = await (await page.request.get('/_test/state')).json()
   expect(state.products).toHaveLength(4)
 })
@@ -88,7 +94,7 @@ test('server similarity check can be acknowledged even when names do not contain
   await expect(page.getByRole('alert')).toContainText('similar product')
   await page.getByLabel('This is a different product.', { exact: true }).check()
   await page.getByRole('button', { name: 'Save product', exact: true }).click()
-  await expect(details(page)).toContainText('Mik')
+  await showSaved(page, 'Mik')
 })
 
 test('grocery creation returns to the same list with a selected product and waits for Add to list', async ({ page }) => {
@@ -102,7 +108,8 @@ test('grocery creation returns to the same list with a selected product and wait
   await page.getByLabel('How do you count or measure it?').selectOption('5')
   await page.getByLabel('Where do you normally keep it?').selectOption('2')
   await page.getByRole('button', { name: 'Save product', exact: true }).click()
-  await page.getByRole('button', { name: 'Continue with this product', exact: true }).click()
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Add to list', exact: true })).toBeFocused()
   await expect(page.getByRole('combobox', { name: 'Shopping list', exact: true })).toHaveValue('3')
   await expect(page.getByText('Selected: Coffee', { exact: true })).toBeVisible()
   await expect(page.getByLabel('Quantity', { exact: false })).toHaveValue('12')
@@ -125,7 +132,7 @@ for (const mode of ['write','reload']) {
     await expect(page.getByRole('alert')).not.toContainText('SECRET')
     await expect(page.getByRole('button', { name: 'Save product', exact: true })).toBeDisabled()
     await page.getByRole('dialog').getByRole('button', { name: 'Refresh products', exact: true }).click()
-    await page.getByRole('button', { name: 'Return to previous screen' }).click()
+    await page.getByRole('button', { name: 'Cancel', exact: true }).click()
     await expect(page.getByRole('button', { name: 'Add product', exact: true })).toBeEnabled()
     const state = await (await page.request.get('/_test/state')).json()
     expect(state.products).toHaveLength(mode === 'reload' ? 4 : 3)
@@ -146,9 +153,9 @@ test('pending product save disables duplicate submits and navigation', async ({ 
   await expect(page.getByRole('button', { name: 'Save product', exact: true })).toBeDisabled()
   await page.keyboard.press('Escape')
   await expect(page.getByRole('dialog')).toBeVisible()
-  await expect(page.getByRole('button', { name: 'Return to previous screen' })).toBeDisabled()
+  await expect(page.getByRole('button', { name: 'Cancel', exact: true })).toBeDisabled()
   release()
-  await expect(details(page)).toContainText('Coffee')
+  await showSaved(page, 'Coffee')
 })
 
 test('rejects stale edits without overwriting external changes', async ({ page }) => {

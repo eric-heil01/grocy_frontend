@@ -47,3 +47,13 @@
   .grocery-row-main > button { padding: 9px 12px; }
 
 }
+.product-created:empty, .grocery-status:empty { display: none; }
+.product-created:not(:empty) { padding: 14px; background: #edf4e6; border-radius: 10px; margin: 0 0 18px; }
+.grocery-page .intro { padding-top: 24px; }
+.grocery-page .create-product-link { display: block; width: 100%; margin-top: 14px; border-color: #78967e; color: #284d39; background: #f4f7ef; text-align: left; }
+.grocery-page .add-item form > fieldset > .primary { width: 100%; }
+.grocery-page .list-selector { display: flex; margin: 0 0 18px; }
+.grocery-list .count { font-size: 2rem; }
+.grocery-page .completion { flex-basis: 48px; min-height: 48px; }
+.completion input { width: 32px; height: 32px; }
+@media(min-width: 900px) { .grocery-layout { grid-template-columns: minmax(340px, .85fr) minmax(0, 1.25fr); } .add-item { top: 24px; } }

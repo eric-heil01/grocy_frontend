@@ -1,26 +1,46 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { addGroceryItem, getGroceryEntries, getGroceryLists, removeGroceryItem, searchProducts, updateGroceryItem } from './api'
 import type { GroceryCreate, GroceryEntries, GroceryItem, GroceryLists, ProductOption } from './api'
 import './Groceries.css'
 import { ProductCreationDialog } from './ProductCreationDialog'
+import useUnsavedChanges from './useUnsavedChanges'
+import Icon from './Icon'
 
 function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : 'Unable to complete the request. Please refresh the list.'
 }
 
 type Mutation = (operation: () => Promise<unknown>, message: string, afterSave?: () => void) => Promise<void>
+type GroceryDraft = { mode: 'product' | 'text'; query: string; product: ProductOption | null; amount: string; note: string }
+type AddItemProps = {
+  productRevision: number
+  onProductCreated: () => void
+  initialDraft?: GroceryDraft
+  onDraftChange: (draft: GroceryDraft) => void
+  onProductBusy: (busy: boolean) => void
+  disabled: boolean
+  onAdd: (entry: GroceryCreate, reset: () => void) => Promise<void>
+}
 
-function AddItem({ disabled, onAdd, onProductBusy }: { onProductBusy: (busy: boolean) => void; disabled: boolean; onAdd: (entry: GroceryCreate, reset: () => void) => Promise<void> }) {
+function AddItem({ disabled, onAdd, onProductBusy, initialDraft, onDraftChange, productRevision, onProductCreated }: AddItemProps) {
   const [creating, setCreating] = useState(false)
-  const [mode, setMode] = useState<'product' | 'text'>('product')
-  const [query, setQuery] = useState('')
-  const [product, setProduct] = useState<ProductOption | null>(null)
+  const [mode, setMode] = useState<'product' | 'text'>(initialDraft?.mode ?? 'product')
+  const [query, setQuery] = useState(initialDraft?.query ?? '')
+  const [product, setProduct] = useState<ProductOption | null>(initialDraft?.product ?? null)
   const [results, setResults] = useState<ProductOption[]>([])
-  const [searching, setSearching] = useState(false)
+  const [searching, setSearching] = useState(Boolean(initialDraft?.query && !initialDraft.product))
   const [searchError, setSearchError] = useState('')
-  const [amount, setAmount] = useState('1')
-  const [note, setNote] = useState('')
+  const [amount, setAmount] = useState(initialDraft?.amount ?? '1')
+  const [note, setNote] = useState(initialDraft?.note ?? '')
+  useEffect(() => { onDraftChange({ mode, query, product, amount, note }) }, [mode, query, product, amount, note, onDraftChange])
+  const [creationNotice, setCreationNotice] = useState('')
+  const addButton = useRef<HTMLButtonElement>(null)
+  const focusAfterCreation = useRef(false)
+  useUnsavedChanges(Boolean(query || note || amount !== '1'))
+  useEffect(() => {
+    if (!creating && focusAfterCreation.current) { addButton.current?.focus(); focusAfterCreation.current = false }
+  }, [creating])
   const searchInput = useRef<HTMLInputElement>(null)
   const focusAfterSave = useRef(false)
   useEffect(() => {
@@ -34,15 +54,16 @@ function AddItem({ disabled, onAdd, onProductBusy }: { onProductBusy: (busy: boo
     if (mode !== 'product' || product || !query.trim()) return
     const controller = new AbortController()
     const timer = setTimeout(() => {
+      setSearching(true); setSearchError('')
       searchProducts(query.trim(), controller.signal).then(setResults).catch(error => {
         if (!controller.signal.aborted) setSearchError(errorMessage(error))
       }).finally(() => { if (!controller.signal.aborted) setSearching(false) })
     }, 200)
     return () => { clearTimeout(timer); controller.abort() }
-  }, [query, product, mode])
+  }, [query, product, mode, productRevision])
 
   function reset() {
-    setQuery(''); setProduct(null); setResults([]); setNote(''); setAmount('1'); setSearchError('')
+    setQuery(''); setProduct(null); setResults([]); setNote(''); setAmount('1'); setSearchError(''); setCreationNotice('')
     focusAfterSave.current = true
   }
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -53,8 +74,12 @@ function AddItem({ disabled, onAdd, onProductBusy }: { onProductBusy: (busy: boo
 
   return <section className="card add-item" aria-labelledby="add-heading">
     <h2 id="add-heading">Add an item</h2>
-    {creating && <ProductCreationDialog initialName={query.trim()} onBusy={onProductBusy} onCancel={() => setCreating(false)} onChoose={created => {
+    <p className="product-created" role="status">{creationNotice}</p>
+    {creating && <ProductCreationDialog initialName={query.trim()} onBusy={onProductBusy} onCancel={() => setCreating(false)} onChoose={(created, saved) => {
       setProduct({ id: created.id, name: created.name, unit_id: created.unit_id, unit_name: created.unit_name }); setQuery(created.name); setResults([]); setSearching(false); setSearchError(''); setCreating(false)
+      setCreationNotice(saved ? `Product saved: ${created.name}. Choose Add to list when you’re ready.` : `${created.name} selected. Choose Add to list when you’re ready.`)
+      focusAfterCreation.current = true
+      if (saved) onProductCreated()
     }} />}<form onSubmit={submit}>
       <fieldset disabled={disabled}>
         <legend className="sr-only">New grocery item</legend>
@@ -75,7 +100,7 @@ function AddItem({ disabled, onAdd, onProductBusy }: { onProductBusy: (busy: boo
             <button type="button" onClick={() => { setProduct(result); setQuery(result.name); setResults([]); setSearching(false) }}>{result.name}<small>{result.unit_name ?? 'Unit unavailable'}</small></button>
           </li>)}</ul>}
           {!product && query.trim() && !searching && !searchError && results.length === 0 && <div><p className="muted">No matching products. Create a new product below, try another name, or add a free-text item.</p></div>}
-          <button type="button" onClick={() => setCreating(true)}>Create new product</button>{product && <p className="selected-product">Selected: <strong>{product.name}</strong></p>}
+          <button className="create-product-link" type="button" onClick={() => { setCreationNotice(''); setCreating(true) }}><Icon name="plus" />Create new product</button>{product && <p className="selected-product">Selected: <strong>{product.name}</strong></p>}
         </div>}
         <div className="add-fields">
           <label>Quantity{product && mode === 'product' && <small>in {product.unit_name ?? 'stock units'}</small>}
@@ -85,7 +110,7 @@ function AddItem({ disabled, onAdd, onProductBusy }: { onProductBusy: (busy: boo
             <input value={note} maxLength={2000} required={mode === 'text'} onChange={event => setNote(event.target.value)} />
           </label>
         </div>
-        <button className="primary" disabled={mode === 'product' ? !product || !product.unit_id : !note.trim()} type="submit">Add to list</button>
+        <button ref={addButton} className="primary" disabled={mode === 'product' ? !product || !product.unit_id : !note.trim()} type="submit">Add to list</button>
       </fieldset>
     </form>
   </section>
@@ -96,6 +121,7 @@ function ItemRow({ item, disabled, mutate }: { item: GroceryItem; disabled: bool
   const [amount, setAmount] = useState(String(item.amount ?? 1))
   const [note, setNote] = useState(item.note ?? '')
   const [removing, setRemoving] = useState(false)
+  useUnsavedChanges(editing && (amount !== String(item.amount ?? 1) || note !== (item.note ?? '')))
   return <li className={`grocery-row ${item.done ? 'is-complete' : ''}`}>
     <div className="grocery-row-main">
       <label className="completion"><input type="checkbox" checked={item.done} disabled={disabled} aria-label={`Mark ${item.name} ${item.done ? 'incomplete' : 'complete'}`}
@@ -125,10 +151,15 @@ function ItemRow({ item, disabled, mutate }: { item: GroceryItem; disabled: bool
   </li>
 }
 
-export default function Groceries() {
+export default function Groceries({ productRevision, onProductCreated }: { productRevision: number; onProductCreated: () => void }) {
+  const [drafts, setDrafts] = useState<Record<number, GroceryDraft>>({})
+  useUnsavedChanges(Object.values(drafts).some(draft => Boolean(draft.query || draft.note || draft.amount !== '1')))
   const [productBusy, setProductBusy] = useState(false)
   const [catalog, setCatalog] = useState<GroceryLists | null>(null)
   const [selected, setSelected] = useState<number | null>(null)
+  const cacheDraft = useCallback((draft: GroceryDraft) => {
+    if (selected !== null) setDrafts(previous => ({ ...previous, [selected]: draft }))
+  }, [selected])
   const [entries, setEntries] = useState<GroceryEntries | null>(null)
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
@@ -192,10 +223,9 @@ export default function Groceries() {
     }
   }
 
-  return <main className="grocery-page">
-    <div className="product-actions"><button disabled={loading || busy || productBusy} onClick={refresh}>Refresh</button></div>
-    <nav aria-label="Page navigation">{busy || productBusy ? <span>Saving to Grocy...</span> : <a href="#">Back to dashboard</a>}</nav>
-    <div className="intro"><p className="eyebrow">ONE LESS THING TO REMEMBER</p><h1>Your grocery list.</h1><p>Add what you need. Check it off as you shop.</p></div>
+  return <main tabIndex={-1} className="grocery-page">
+    <div className="page-toolbar"><span>Shop with a little less to remember</span><button disabled={loading || busy || productBusy} onClick={refresh}>Refresh</button></div>
+    <div className="intro"><p className="eyebrow">ONE LESS THING TO REMEMBER</p><h1 tabIndex={-1}>Your grocery list.</h1><p>Add what you need. Check it off as you shop.</p></div>
     {catalog && catalog.lists.length > 0 && <label className="list-selector">Shopping list<select value={selected ?? ''} disabled={busy || productBusy} onChange={event => {
       setSelected(Number(event.target.value)); setEntries(null); setLoading(true); setError(''); setStatus(''); setNeedsRefresh(false)
     }}>{catalog.lists.map(list => <option key={list.id} value={list.id}>{list.name}</option>)}</select></label>}
@@ -203,7 +233,7 @@ export default function Groceries() {
     <p className="grocery-status" role="status">{busy ? 'Saving and refreshing your list...' : loading ? 'Loading your groceries...' : status}</p>
     {catalog?.lists.length === 0 && <section className="card"><h2>No shopping lists yet</h2><p>Create a shopping list in Grocy to get started.</p></section>}
     {selected !== null && <div className="grocery-layout">
-      <AddItem onProductBusy={setProductBusy} key={selected} disabled={busy || loading || needsRefresh || !entries} onAdd={(entry, reset) => mutate(() => addGroceryItem(selected, entry), 'Item added.', reset)} />
+      <AddItem onProductBusy={setProductBusy} key={selected} productRevision={productRevision} onProductCreated={onProductCreated} initialDraft={drafts[selected]} onDraftChange={cacheDraft} disabled={busy || loading || needsRefresh || !entries} onAdd={(entry, reset) => mutate(() => addGroceryItem(selected, entry), 'Item added.', reset)} />
       <section className="card grocery-list" aria-labelledby="items-heading" aria-busy={busy || loading}>
         <h2 id="items-heading">{entries?.name ?? 'Grocery items'}</h2>
         {entries && <><p className="count">{entries.remaining_items}<span>items remaining / {entries.total_items} total</span></p><p className="muted unit-help">Product quantities are in stock units. Checking an item off does not add it to inventory.</p>

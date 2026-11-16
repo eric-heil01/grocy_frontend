@@ -13,3 +13,8 @@
 .recipe-results button { width: 100%; text-align: left; margin-bottom: 6px; overflow-wrap: anywhere; }
 .meal-confirm { padding: 12px 0; }
 @media (min-width: 850px) { .meal-days { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; } }
+.meal-page > [role=status]:empty { display: none; }
+.meal-page .intro { padding-bottom: 24px; }
+.meal-day > button { width: 100%; margin-top: 4px; }
+.meal-day > .dinner-form { margin-top: 18px; }
+.meal-page .meal-actions button { min-height: 48px; }

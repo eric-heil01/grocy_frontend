@@ -47,7 +47,7 @@ test('searches and adds a product with quantity/note, persists after reload and 
   await expect(add.getByLabel('Find a product')).toBeFocused()
   await page.reload()
   await expect(row(page, 'Tea')).toContainText('3 bottle')
-  await page.getByRole('link', { name: 'Back to dashboard' }).click()
+  await page.getByRole('link', { name: 'Home', exact: true }).click()
   await expect(page.locator('.groceries .count')).toContainText('2items remaining')
   const upstream = await state(page)
   expect(upstream.items.find((item: { product_id: number }) => item.product_id === 11)).toMatchObject({ amount: 3, note: 'Decaf', shopping_list_id: 2, qu_id: 5 })

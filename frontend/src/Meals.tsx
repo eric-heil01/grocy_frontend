@@ -3,6 +3,7 @@ import type { FormEvent } from 'react'
 import { addMeal, formatDay, getMeals, removeMeal, searchRecipes, shiftDate, updateMeal } from './api'
 import type { MealChanges, MealWeek, PlannedMeal, RecipeOption } from './api'
 import './Meals.css'
+import useUnsavedChanges from './useUnsavedChanges'
 
 function DinnerForm({ initialDay, entry, disabled, save, cancel }: {
   initialDay: string; entry: PlannedMeal | null; disabled: boolean
@@ -15,6 +16,7 @@ function DinnerForm({ initialDay, entry, disabled, save, cancel }: {
   const [searchError, setSearchError] = useState('')
   const [recipe, setRecipe] = useState<RecipeOption | null>(entry?.recipe_id ? { id: entry.recipe_id, name: entry.name, base_servings: null } : null)
   const [servings, setServings] = useState(String(entry?.recipe_servings ?? 1))
+  useUnsavedChanges(Boolean(query || day !== initialDay || servings !== String(entry?.recipe_servings ?? 1)))
   useEffect(() => {
     if (!query.trim()) return
     const controller = new AbortController()
@@ -79,6 +81,10 @@ export default function Meals() {
     const timer = setTimeout(() => void load(), 0)
     return () => { clearTimeout(timer); active.current = false }
   }, [])
+  function changeWeek(start?: string) {
+    if (editor) { setNotice('Save or cancel your dinner before changing the week or refreshing.'); return }
+    void load(start)
+  }
   async function mutate(operation: () => Promise<unknown>) {
     if (inFlight.current || locked) return
     inFlight.current = true
@@ -92,17 +98,16 @@ export default function Meals() {
     } finally { inFlight.current = false; if (active.current) setBusy(false) }
   }
   const disabled = busy || locked
-  return <main className="meal-page">
-    <div className="product-actions"><button disabled={busy} onClick={() => void load(week?.start)}>Refresh dinners</button></div>
-    <nav><a href="#">Back to dashboard</a></nav>
-    <div className="intro"><p className="eyebrow">AT THE TABLE</p><h1>Plan your dinners.</h1><p>Seven days, one less thing to think about.</p></div>
+  return <main tabIndex={-1} className="meal-page">
+    <div className="page-toolbar"><span>A week of good dinners</span><button disabled={busy} onClick={() => changeWeek(week?.start)}>Refresh dinners</button></div>
+    <div className="intro"><p className="eyebrow">AT THE TABLE</p><h1 tabIndex={-1}>Plan your dinners.</h1><p>Seven days, one less thing to think about.</p></div>
     {error && <p role="alert" className="message error">{error} Editing is paused until Refresh dinners succeeds.</p>}
     <div role="status" aria-live="polite">{busy ? 'Loading dinners...' : notice}</div>
     {week && <>
       <nav className="meal-actions" aria-label="Week navigation">
-        <button disabled={disabled} onClick={() => void load(shiftDate(week.start, -7))}>Previous week</button>
-        <button disabled={disabled} onClick={() => void load()}>Current week</button>
-        <button disabled={disabled} onClick={() => void load(shiftDate(week.start, 7))}>Next week</button>
+        <button disabled={disabled} onClick={() => changeWeek(shiftDate(week.start, -7))}>Previous week</button>
+        <button disabled={disabled} onClick={() => changeWeek()}>Current week</button>
+        <button disabled={disabled} onClick={() => changeWeek(shiftDate(week.start, 7))}>Next week</button>
       </nav>
       <p className="date">{formatDay(week.start, { month: 'long', day: 'numeric', year: 'numeric' })} – {formatDay(week.days[6].date, { month: 'long', day: 'numeric', year: 'numeric' })} / {week.timezone}</p>
       <div className="meal-days">{week.days.map(day => <section className="card meal-day" key={day.date} aria-label={day.date}>
